@@ -4,48 +4,112 @@
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
+#include <locale.h>
 
 #define BUFFER_LENGTH 256           ///< The buffer length (crude but fine)
 static char receive[BUFFER_LENGTH]; ///< The receive buffer from the LKM
 
+void clearMessage(char[]);
+void clearScreen();
+
 int main()
 {
+    setlocale(LC_ALL, "Portuguese");
+
     int ret, fd;
+    int option1, option2;
     char messageToEncrypt[BUFFER_LENGTH];
 
     printf("Starting device test code example...\n");
 
-    /* Abre device */
+    
     if ((fd = open("/dev/crypto", O_RDWR)) < 0)
     {
         perror("Failed to open the device...");
         return errno;
     }
 
-    /* Frase enviada ao módulo */
-    printf("Type in a short string to send to the kernel module:\n");
-    scanf("%[^\n]%*c", messageToEncrypt); // Read in a string (with spaces)
-    /* Manda mensagem para o device */
-    printf("Writing message to the device [%s].\n", messageToEncrypt);
-    if((ret = write(fd, messageToEncrypt, strlen(messageToEncrypt))) < 0){
-        perror("Failed to write the message to the device.");
-        return errno;
-    } 
+    do
+    {
+        do
+        {
+            clearScreen();
+            printf("====================\n");
+            printf("1.Cifrar mensagem\n");
+            printf("2.Decifrar mensagem\n");
+            printf("3.Resumo criptográfico\n");
+            printf("0.Sair\n");
+            printf("====================\n");
+            printf("Digite a opção desejada: ");
+            scanf("%d", &option2);
 
-    printf("Press ENTER to read back from the device...\n");
-    getchar();
+        } while (option2 < 0 || option2 > 3);
 
-    /* Lê resposta do device*/
-    printf("Reading from the device...\n");
-    if((ret = read(fd, receive, BUFFER_LENGTH)) < 0){
-        perror("Failed to read the message from the device.");
-        return errno;
-    }
+        switch (option2)
+        {
+        case 0:
+            return 0;
+            break;
 
-    printf("The received message is: [%s]\n", receive);
-    printf("End of the program\n");
+        case 1: //Cifrar
+            clearScreen();
+            clearMessage(messageToEncrypt);
+            printf("Digite a mensagem para ser decifrada: ");
+            scanf("%[^\n]%*c", messageToEncrypt);
+            clearScreen();
+
+            if ((ret = write(fd, messageToEncrypt, strlen(messageToEncrypt))) < 0)
+            {
+                perror("Falha ao enviar mensagem");
+                return errno;
+            }
+
+            printf("Pressione ENTER para ler a resposta\n");
+            getchar();
+
+            if ((ret = read(fd, receive, BUFFER_LENGTH)) < 0)
+            {
+                perror("Falha ao ler resposta");
+                return errno;
+            }
+
+            printf("Mensagem Cifrada: [%s]\n", receive);
+
+            break;
+
+        case 2: //Decifrar
+            break;
+
+        case 3: //Hash
+            break;
+        }
+
+        clearScreen();
+        printf("====================\n");
+        printf("1.Continuar\n");
+        printf("0.Sair\n");
+        printf("====================\n");
+        printf("Digite a opção desejada: ");
+        scanf("%d", &option1);
+
+    } while (option1 != 0);
 
     close(fd);
 
     return 0;
+
+    return 0;
+}
+
+void clearMessage(char message[])
+{
+    for (int i = 0; i < strlen(message); i++)
+    {
+        message[i] = '\0';
+    }
+}
+
+void clearScreen()
+{
+    printf("\033[H\033[J");
 }
