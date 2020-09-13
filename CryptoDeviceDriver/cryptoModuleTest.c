@@ -52,11 +52,13 @@ int main()
             break;
 
         case 1: //Cifrar
+	    printf("oi");
+	    getchar();
             clearScreen();
             clearMessage(messageToEncrypt);
             printf("Digite a mensagem para ser decifrada: ");
             scanf("%[^\n]%*c", messageToEncrypt);
-            clearScreen();
+            
 
             if ((ret = write(fd, messageToEncrypt, strlen(messageToEncrypt))) < 0)
             {
@@ -64,7 +66,7 @@ int main()
                 return errno;
             }
 
-            printf("Pressione ENTER para ler a resposta\n");
+            printf("\nPressione ENTER para ler a resposta\n");
             getchar();
 
             if ((ret = read(fd, receive, BUFFER_LENGTH)) < 0)
@@ -74,6 +76,8 @@ int main()
             }
 
             printf("Mensagem Cifrada: [%s]\n", receive);
+	    printf("Pressione ENTER para continuar\n");
+	    getchar();
 
             break;
 
