@@ -5,6 +5,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <locale.h>
+#include <stdio_ext.h>
 
 #define BUFFER_LENGTH 256           ///< The buffer length (crude but fine)
 static char receive[BUFFER_LENGTH]; ///< The receive buffer from the LKM
@@ -18,9 +19,7 @@ int main()
 
     int ret, fd;
     int option1, option2;
-    char messageToEncrypt[BUFFER_LENGTH];
-
-    printf("Starting device test code example...\n");
+    char messageToSend[BUFFER_LENGTH];
 
     
     if ((fd = open("/dev/crypto", O_RDWR)) < 0)
@@ -31,7 +30,11 @@ int main()
 
     do
     {
-        do
+
+	clearMessage(messageToSend);
+	clearMessage(receive);
+        	
+	do
         {
             clearScreen();
             printf("====================\n");
@@ -42,25 +45,25 @@ int main()
             printf("====================\n");
             printf("Digite a opção desejada: ");
             scanf("%d", &option2);
+	    getchar();
 
         } while (option2 < 0 || option2 > 3);
 
         switch (option2)
         {
         case 0:
+
             return 0;
             break;
 
         case 1: //Cifrar
-	    printf("oi");
-	    getchar();
-            clearScreen();
-            clearMessage(messageToEncrypt);
-            printf("Digite a mensagem para ser decifrada: ");
-            scanf("%[^\n]%*c", messageToEncrypt);
-            
 
-            if ((ret = write(fd, messageToEncrypt, strlen(messageToEncrypt))) < 0)
+            clearScreen();
+            printf("Digite a mensagem para ser cifrada: ");
+            scanf("%[^\n]%*c", messageToSend);
+	    strcat(messageToSend," c");
+            
+	    if ((ret = write(fd, messageToSend, strlen(messageToSend))) < 0)
             {
                 perror("Falha ao enviar mensagem");
                 return errno;
@@ -82,9 +85,60 @@ int main()
             break;
 
         case 2: //Decifrar
+	    
+	    clearScreen();
+            printf("Digite a mensagem para ser decifrada: ");
+            scanf("%[^\n]%*c", messageToSend);
+	    strcat(messageToSend," d");
+
+            if ((ret = write(fd, messageToSend, strlen(messageToSend))) < 0)
+            {
+                perror("Falha ao enviar mensagem");
+                return errno;
+            }
+
+            printf("\nPressione ENTER para ler a resposta\n");
+            getchar();
+
+            if ((ret = read(fd, receive, BUFFER_LENGTH)) < 0)
+            {
+                perror("Falha ao ler resposta");
+                return errno;
+            }
+
+            printf("Mensagem Decifrada: [%s]\n", receive);
+	    printf("Pressione ENTER para continuar\n");
+	    getchar();
+
             break;
 
         case 3: //Hash
+
+	    clearScreen();
+            printf("Digite a mensagem para calcular o hash: ");
+            scanf("%[^\n]%*c", messageToSend);
+	    strcat(messageToSend," h");
+
+            if ((ret = write(fd, messageToSend, strlen(messageToSend))) < 0)
+            {
+                perror("Falha ao enviar mensagem");
+                return errno;
+            }
+
+            printf("\nPressione ENTER para ler a resposta\n");
+            getchar();
+
+            if ((ret = read(fd, receive, BUFFER_LENGTH)) < 0)
+            {
+                perror("Falha ao ler resposta");
+                return errno;
+            }
+
+            printf("Cálculo Hash: [%s]\n", receive);
+	    printf("Pressione ENTER para continuar\n");
+	    getchar();
+
+            break;
             break;
         }
 
@@ -95,15 +149,20 @@ int main()
         printf("====================\n");
         printf("Digite a opção desejada: ");
         scanf("%d", &option1);
+	getchar();
 
     } while (option1 != 0);
 
-    close(fd);
-
-    return 0;
+    if((ret = close(fd)) < 0)
+    {
+    	perror("Erro ao fechar o arquivo");
+	return errno;
+    }
 
     return 0;
 }
+
+/* ================================================== */
 
 void clearMessage(char message[])
 {

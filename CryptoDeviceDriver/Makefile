@@ -8,5 +8,5 @@ all:
 	
 clean:
 	sudo rmmod cryptomodule
-	rm test
+	sudo rm test
 	make -C /lib/modules/$(shell uname -r)/build/ M=$(PWD) clean
