@@ -13,7 +13,7 @@
 #define CLASS_NAME "cry"     /* The device class */
 
 MODULE_LICENSE("GPL");                    
-MODULE_AUTHOR("Cesar");                   
+MODULE_AUTHOR("-----");                   
 MODULE_DESCRIPTION("CryptoDeviceDriver"); 
 MODULE_SUPPORTED_DEVICE("crypto");
 MODULE_VERSION("1.0");                    
@@ -27,6 +27,18 @@ static int numberOpens = 0;                /* Vezes que o device foi aberto */
 static struct class *cryptoClass = NULL;   /* device-driver class struct pointer */
 static struct device *cryptoDevice = NULL; /* device-driver device struct pointer */
 static DEFINE_MUTEX(crypto_mutex);	
+
+struct tcrypt_result {
+    struct completion completion;
+    int err;
+};
+
+struct skcipher_def {
+    struct scatterlist sg;
+    struct crypto_skcipher *tfm;
+    struct skcipher_request *req;
+    struct tcrypt_result result;
+};
 
 /* ================================================== */
 
@@ -133,14 +145,6 @@ static int dev_open(struct inode *inodep, struct file *filep)
 
 /* ================================================== */
 
-/** @brief This function is called whenever device is being read from user space i.e. data is
- *  being sent from the device to the user. In this case is uses the copy_to_user() function to
- *  send the buffer string to the user and captures any errors.
- *  @param filep A pointer to a file object (defined in linux/fs.h)
- *  @param buffer The pointer to the buffer to which this function writes the data
- *  @param len The length of the b
- *  @param offset The offset if required
- */
 static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *offset)
 {
 	int error_count = 0;
@@ -161,14 +165,6 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
 
 /* ================================================== */
 
-/** @brief This function is called whenever the device is being written to from user space i.e.
- *  data is sent to the device from the user. The data is copied to the message[] array in this
- *  LKM using the sprintf() function along with the length of the string.
- *  @param filep A pointer to a file object
- *  @param buffer The buffer to that contains the string to write to the device
- *  @param len The length of the array of data that is being passed in the const char buffer
- *  @param offset The offset if required
- */
 static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset)
 {
 	sprintf(message, "%s", buffer); // appending received string with its length
@@ -178,18 +174,15 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
 	switch(message[size_of_message - 1]){
 
 		case 'c':
-			printk("Cifrar mensagem");
-			encrypt(message, size_of_message);
+			encrypt(message, size_of_message - 2);
 		break;
 		
 		case 'd':
-			printk("Decifrar mensagem");
-			decrypt(message, size_of_message);
+			decrypt(message, size_of_message - 2);
 		break;
 		
 		case 'h':
-			printk("Hash mensagem");
-			hash(message, size_of_message);
+			hash(message, size_of_message - 2);
 		break;
 	}
 	    
@@ -209,6 +202,92 @@ static int dev_release(struct inode *inodep, struct file *filep)
 
 static int encrypt(char *message, int messageLength)
 {
+	struct crypto_skcipher *skcipher = NULL;
+   	struct skcipher_request *req = NULL;
+	
+	int ret = -EFAULT;
+	
+	char *iv_encrypt;
+	size_t iv_size;
+
+	int key_encrypt
+
+	char *scratchpad = NULL;
+	
+	/* ========== */
+
+	/* Allocate a cipher handle for an skcipher */
+	skcipher = crypto_alloc_skcipher("cbc(aes)", 0, 0);
+	if (IS_ERR(skcipher)) {
+		pr_info("could not allocate skcipher handle\n");
+		return PTR_ERR(skcipher);
+	}
+
+	/* ========== */
+
+	/* Allocate the request data structure that must be used with the skcipher encrypt and decrypt API calls */
+	req = skcipher_request_alloc(skcipher, GFP_KERNEL);
+	if (!req) {
+		pr_info("could not allocate skcipher request\n");
+		ret = -ENOMEM;
+		goto out;
+	}
+	
+	/* ========== */
+
+	/* Set key */
+	key_encrypt = crypto_skcipher_setkey(skcipher, key, 16);
+	if (key_encrypt) {
+   	     pr_err("fail setting key for transformation: %d\n", err);
+   	     goto out;
+	}
+
+	/* Preencher espaço key */	
+	for(int i = 0; i < 16; i++){
+	}
+
+	/* ========== */
+
+	/* Set iv */
+	iv_size = crypto_skcipher_ivsize(tfm);
+	iv_encrypt = vmalloc(iv_size);
+	if (!iv_encrypt) {
+		pr_err("could not allocate iv vector\n");
+		err = -ENOMEM;
+		goto error0;
+	}
+
+	/* Preencher espaço iv */
+	for(int i = 0; i < iv_size; i++){
+	}
+
+	/* ========== */
+
+	/* Set message */
+	scratchpad = vmalloc(messageLength);
+	if (!scratchpad) {
+		pr_info("Could not allocate scratchpad\n");
+		goto out;
+	}
+
+	/* Preencher espaço scratchpad(message) */
+	for(int i = 0; i < messageLength; i++){
+	}
+
+	/* ========== */
+
+	out:
+	if (skcipher)
+   	     	crypto_free_skcipher(skcipher);
+	if (req)
+        	skcipher_request_free(req);
+	if (key_encrypt)
+		vfree(key_encrypt);
+	if (iv_encrypt)
+      		vfree(iv_encrypt);
+	if (scratchpad)
+    	    vfree(scratchpad);
+
 	return 0;
 }
 
