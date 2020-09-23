@@ -78,7 +78,7 @@ static struct file_operations fops = {
 
 static int encrypt(char *message, int messageLength);
 static void test_skcipher_cb(struct crypto_async_request *req, int error);
-static unsigned int test_skcipher_encdec(struct skcipher_def *sk, int enc);
+//static unsigned int test_skcipher_encdec(struct skcipher_def *sk, int enc);
 
 static int decrypt(char *message, int messageLength);
 static int hash(char *message, int messageLength);
@@ -215,7 +215,8 @@ static int encrypt(char message[], int messageLength)
 	struct skcipher_def sk;
 	struct crypto_skcipher *skcipher = NULL;
    	struct skcipher_request *req = NULL;
-	
+	int rc = 0;
+
 	int ret = -EFAULT;
 	
 	char *iv_encrypt = NULL;
@@ -241,19 +242,23 @@ static int encrypt(char message[], int messageLength)
 		ret = -ENOMEM;
 		goto out;
 	}
-
+	
 	skcipher_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG, test_skcipher_cb, &sk.result);
 
 	/* ==================== */
 
 	/* Set key */
+	key_encrypt = vmalloc(16);
+
 	for(i = 0; i < 16; i++){
-		key_encrypt[i] = key[i];	
+		key_encrypt[i] = key[i];
 	}
+
 	if (crypto_skcipher_setkey(skcipher, key_encrypt, 16)) {
    	     pr_err("fail setting key");
    	     goto out;
 	}
+	print_hex_dump(KERN_DEBUG, "Key_encrypt: ", DUMP_PREFIX_NONE, 16, 1, key_encrypt, 16, true);
 
 	/* ==================== */
 
@@ -269,6 +274,7 @@ static int encrypt(char message[], int messageLength)
 	for(i = 0; i < 16; i++){
 		iv_encrypt[i] = iv[i];
 	}
+	print_hex_dump(KERN_DEBUG, "Iv_encrypt: ", DUMP_PREFIX_NONE, 16, 1, iv_encrypt, 16, true);
 
 	/* ==================== */
 
@@ -278,34 +284,35 @@ static int encrypt(char message[], int messageLength)
 		pr_info("Could not allocate scratchpad\n");
 		goto out;
 	}
-
-	/* Preencher espaço alocado para scratchpad(message) */
-	for(i = 0; i < messageLength; i++){
-		scratchpad[i] = message[i];
-	}
-
+	
+	/* Preencher espaço message */
+	memcpy(scratchpad, message, messageLength);
+	print_hex_dump(KERN_DEBUG, "Message: ", DUMP_PREFIX_NONE, 16, 1, scratchpad, 16, true);
+	
 	/* ==================== */
 
 	/* Setando struct */
 	sk.tfm = skcipher;
     	sk.req = req;
 
-	/* ==================== */
 
 	/* Cifrar / Encrypt */
 	sg_init_one(&sk.sg, scratchpad, 16);
 	skcipher_request_set_crypt(req, &sk.sg, &sk.sg, 16, iv_encrypt);
     	init_completion(&sk.result.completion);
 
-	ret = test_skcipher_encdec(&sk, 1);
-    	if (ret){
-        	goto out;
+	rc = crypto_skcipher_encrypt(req);
+	
+	if(rc){
+		pr_info("skcipher encrypt returned with %d result %d\n", rc, sk.result.err);
+		goto out;
 	}
 
-	/* ==================== */
+    	init_completion(&sk.result.completion);
 
 	result = sg_virt(&sk.sg);
-	pr_info("String cifrada: %s", result);
+	//pr_info("String cifrada: %s", result);
+	print_hex_dump(KERN_DEBUG, "Result Data: ", DUMP_PREFIX_NONE, 16, 1, result, 16, true);
 	
 	/* ==================== */
 
@@ -315,10 +322,10 @@ static int encrypt(char message[], int messageLength)
 	   	     	crypto_free_skcipher(skcipher);
 		if (req)
 			skcipher_request_free(req);
-		//if (key_encrypt)
-			//vfree(key_encrypt);
 		if (iv_encrypt)
 	      		vfree(iv_encrypt);
+		if(key_encrypt)
+			vfree(key_encrypt);
 		if (scratchpad)
 	    	    vfree(scratchpad);
 
@@ -334,40 +341,7 @@ static void test_skcipher_cb(struct crypto_async_request *req, int error)
         	return;
 	result->err = error;
 	complete(&result->completion);
-	pr_info("Encryption finished successfully\n");
-}
-
-/* Perform cipher operation */
-static unsigned int test_skcipher_encdec(struct skcipher_def *sk, int enc)
-{
-    int rc = 0;
-
-    if (enc)
-        rc = crypto_skcipher_encrypt(sk->req);
-    else
-        rc = crypto_skcipher_decrypt(sk->req);
-
-    switch (rc) {
-    	case 0:
-        	break;
-   	
-	case -EINPROGRESS:
-
-    	case -EBUSY:
-		rc = wait_for_completion_interruptible(&sk->result.completion);
-		if (!rc && !sk->result.err) {
-		    reinit_completion(&sk->result.completion);
-		    break;
-		}
-
-    	default:
-		pr_info("skcipher encrypt returned with %d result %d\n", rc, sk->result.err);
-        	break;
-    }
-
-    init_completion(&sk->result.completion);
-
-    return rc;
+	//pr_info("Encryption finished successfully\n");
 }
 
 /* ================================================== */
