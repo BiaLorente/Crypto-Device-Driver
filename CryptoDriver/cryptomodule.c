@@ -205,7 +205,7 @@ static int encrypt(char *message, int messageLength)
     char *Eivdata = NULL;
     char *Ekey = NULL;
 
-    int i;
+    int ivSize;
     int scratchpad_size;
     int cypherBlocks;
 
@@ -352,7 +352,7 @@ static int decrypt(char *message, int messageLength)
     char *scratchpad = NULL;
     char *decryptoResult = NULL;
     char *decryptograf = NULL;
-    struct scatterlist sg_decryptograf;
+    struct scatterlist sg_cryptograf;
     struct scatterlist sg_scratchpad;
 
     char *Eivdata = NULL;
@@ -449,7 +449,7 @@ static int decrypt(char *message, int messageLength)
     
     /* scatterlists */
     sg_init_one(&sg_scratchpad, scratchpad, scratchpad_size);
-    sg_init_one(&sg_cryptograf, cryptograf, scratchpad_size);
+    sg_init_one(&sg_cryptograf, decryptograf, scratchpad_size);
 
     skcipher_request_set_crypt(req, &sg_scratchpad, &sg_cryptograf, scratchpad_size, Eivdata);
 
@@ -462,12 +462,12 @@ static int decrypt(char *message, int messageLength)
     }
     
 	//Exibir resultado para debug 
-    cryptoResult = sg_virt(&sg_cryptograf);
+    decryptoResult = sg_virt(&sg_cryptograf);
 
     /*Armazenar resposta para devolver ao programa  */
     for(i=0;i<scratchpad_size;i++){
-	    returnMsg[2*i] = c2h_conv((unsigned char)cryptoResult[i] / 16);
-	    returnMsg[2*i + 1] = c2h_conv((unsigned char)cryptoResult[i] % 16);
+	    returnMsg[2*i] = c2h_conv((unsigned char)decryptoResult[i] / 16);
+	    returnMsg[2*i + 1] = c2h_conv((unsigned char)decryptoResult[i] % 16);
 	}
     returnMsg[2*i] = 0;
     
@@ -486,8 +486,8 @@ static int decrypt(char *message, int messageLength)
         vfree(Eivdata);
     if (scratchpad)
         vfree(scratchpad);
-    if (cryptograf)
-        vfree(cryptograf);
+    if (decryptograf)
+        vfree(decryptograf);
     return ret;
 }
 
