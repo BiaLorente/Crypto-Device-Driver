@@ -1,8 +1,8 @@
 /**
  * @file   cryptomodule.c
- * @author Bia Lorente
+ * @author BiaLorente
  * @date   ---------
- * @version 0.1
+ * @version 1.0
  * @brief   An introductory character driver to support the second article of my series on
  * Linux loadable kernel module (LKM) development. This module maps to /dev/crypto and
  * comes with a helper C program that can be run in Linux user space to communicate with
@@ -15,10 +15,19 @@
 #include <linux/kernel.h>  
 #include <linux/fs.h>      
 #include <linux/uaccess.h> 
-#include <crypto/skcipher.h>
+
 #include <linux/scatterlist.h>
 #include <linux/err.h>
 #include <linux/mutex.h>	         /// Required for the mutex functionality
+#include <linux/moduleparam.h>
+#include <linux/mm.h>
+#include <linux/stat.h>
+#include <linux/crypto.h>
+#include <linux/random.h>
+#include <linux/vmalloc.h>
+#include <crypto/skcipher.h>
+#include <crypto/hash.h>
+
 #define  DEVICE_NAME "crypto"    ///< The device will appear at /dev/crypto using this value
 #define  CLASS_NAME  "cry"        ///< The device class -- this is a character device driver
 
@@ -29,7 +38,7 @@
 
 
 MODULE_LICENSE("GPL");            ///< The license type -- this affects available functionality
-MODULE_AUTHOR("----");    ///< The author -- visible when you use modinfo
+MODULE_AUTHOR("BiaLorente");    ///< The author -- visible when you use modinfo
 MODULE_DESCRIPTION("A simple Linux crypto driver");  ///< The description -- see modinfo
 MODULE_VERSION("1.0");            ///< A version number to inform users
 
@@ -43,6 +52,8 @@ static short  size_of_message;              ///< Used to remember the size of th
 static int    numberOpens = 0;              ///< Counts the number of times the device is opened
 static struct class*  cryptoClass  = NULL; ///< The device-driver class struct pointer
 static struct device* cryptoDevice = NULL; ///< The device-driver device struct pointer
+static DEFINE_MUTEX(crypto_mutex);	
+
 
 /*================Crypto things==================*/
 struct tcrypt_result 
@@ -92,6 +103,8 @@ static int encrypt(char *message, int messageLength);
 static int decrypt(char *message, int messageLength);
 static int hash(char *message, int messageLength);
 
+
+//================================================
 
 static int __init crypto_init(void)
 {
@@ -183,18 +196,31 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
  *  @param offset The offset if required
  */
 static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset){
-   sprintf(message, "%s(%zu letters)", buffer, len);   // appending received string with its length
-   size_of_message = strlen(message);                 // store the length of the stored message
-   printk(KERN_INFO "Crypto: Received %zu characters from the user\n", len);
-   return len;
+   sprintf(message, "%s", buffer); // appending received string with its length
+	size_of_message = strlen(message);                // store the length of the stored message
+	printk(KERN_INFO "Crypto Module: Received %zu characters from the user\n", len);
+
+	switch(message[size_of_message - 1]){
+
+		case 'c':
+			encrypt(message, size_of_message - 2);
+		break;
+		
+		case 'd':
+			decrypt(message, size_of_message - 2);
+		break;
+		
+		case 'h':
+			hash(message, size_of_message - 2);
+		break;
+	}
+	    
+	return len;
 }
 
-/** @brief The device release function that is called whenever the device is closed/released by
- *  the userspace program
- *  @param inodep A pointer to an inode object (defined in linux/fs.h)
- *  @param filep A pointer to a file object (defined in linux/fs.h)
- */
-static int dev_release(struct inode *inodep, struct file *filep){
+
+static int dev_release(struct inode *inodep, struct file *filep)
+{
    mutex_unlock(&crypto_mutex);          /// Releases the mutex (i.e., the lock goes up)
    printk(KERN_INFO "Crypto: Device successfully closed\n");
    return 0;
@@ -202,131 +228,266 @@ static int dev_release(struct inode *inodep, struct file *filep){
 
 static int encrypt(char *message, int messageLength)
 {
-    int err;
+	struct skcipher_def sk;
+	struct crypto_skcipher *skcipher = NULL;
+   	struct skcipher_request *req = NULL;
+	int rc = 0;
 
-    struct crypto_skcipher *tfm;
-    struct skcipher_request *req;
-    struct scatterlist sg;
+	int ret = -EFAULT;
+	
+	char *key_encrypt = NULL;
+	char *iv_encrypt = NULL;
+	char *scratchpad = NULL;
+	char *result = NULL;
 
-    char plaintext[16] = {0};
-    char ciphertext[16] = {0};
-    /* We're going to use a zerod 128 bits key */
-    char key[16] = {0};
+	int i;
 
-    /* Initialization Vector */
-    char *iv;
-    size_t ivsize;
+	/* ==================== */
 
-    pr_dbg("initializing module\n");
+	/* Allocate a cipher handle for an skcipher */
+	skcipher = crypto_alloc_skcipher("cbc(aes)", 0, 0);
+	if (IS_ERR(skcipher)) {
+		pr_info("could not allocate skcipher handle\n");
+		return PTR_ERR(skcipher);
+	}
 
-    /* Check the existence of the cipher in the kernel (it might be a
-     * module and it isn't loaded. */
-    if (!crypto_has_skcipher("salsa20", 0, 0)) {
-        pr_err("skcipher not found\n");
-        return -EINVAL;
-    }
+	/* Allocate the request data structure that must be used with the skcipher encrypt and decrypt API calls */
+	req = skcipher_request_alloc(skcipher, GFP_KERNEL);
+	if (!req) {
+		pr_info("could not allocate skcipher request\n");
+		ret = -ENOMEM;
+		goto out;
+	}
+	
+	skcipher_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG, test_skcipher_cb, &sk.result);
 
-    /* Allocate synchronous cipher handler.
-     *
-     * For generic implementation you can provide either the generic name
-     * "salsa20" or the driver (specific) name "salsa20-generic", since
-     * the generic has higher priority compared to the x86_64 instruction
-     * implementation "salsa20-asm".
-     *
-     * Also, cypher type will be left 0 since there isn't any other type
-     * other than the default one for this cypher and the mask also will
-     * be 0 since I don't want to use the asynchronous interface variant.
-     */
-    tfm = crypto_alloc_skcipher("salsa20", 0, 0);
-    if (IS_ERR(tfm)) {
-        pr_err("impossible to allocate skcipher\n");
-        return PTR_ERR(tfm);
-    }
+	/* ==================== */
 
-    /* Default function to set the key for the symetric key cipher */
-    err = crypto_skcipher_setkey(tfm, key, sizeof(key));
-    if (err) {
-        pr_err("fail setting key for transformation: %d\n", err);
-        goto error0;
-    }
-    print_hex_dump(KERN_DEBUG, "key: ", DUMP_PREFIX_NONE, 16, 1, key, 16,
-               false);
+	/* Set key */
+	key_encrypt = vmalloc(16);
 
-    /* Each crypto cipher has its own Initialization Vector (IV) size,
-     * because of that I first request the correct size for salsa20 IV and
-     * then set it. Considering this is just an example I'll use as IV the
-     * content of a random memory space which I just allocated. */
-    ivsize = crypto_skcipher_ivsize(tfm);
-    iv = kmalloc(ivsize, GFP_KERNEL);
-    if (!iv) {
-        pr_err("could not allocate iv vector\n");
-        err = -ENOMEM;
-        goto error0;
-    }
-    print_hex_dump(KERN_DEBUG, "iv: ", DUMP_PREFIX_NONE, 16, 1, iv,
-               ivsize, false);
+	for(i = 0; i < 16; i++){
+		key_encrypt[i] = key[i];
+	}
 
-    /* Requests are objects that hold all information about a crypto
-     * operation, from the tfm itself to the buffers and IV that will be
-     * used in the enc/decryption operations. But it also holds
-     * information about asynchronous calls to the crypto engine. If we
-     * have chosen async calls instead of sync ones, we should also set
-     * the callback function and some other flags in the request object in
-     * order to be able to receive the output date from each operation
-     * finished. */
-    req = skcipher_request_alloc(tfm, GFP_KERNEL);
-    if (!req) {
-        pr_err("impossible to allocate skcipher request\n");
-        err = -ENOMEM;
-        goto error0;
-    }
+	if (crypto_skcipher_setkey(skcipher, key_encrypt, 16)) {
+   	     pr_err("fail setting key");
+   	     goto out;
+	}
+	print_hex_dump(KERN_DEBUG, "Key_encrypt: ", DUMP_PREFIX_NONE, 16, 1, key_encrypt, 16, true);
 
-    /* The word to be encrypted */
-    /* TODO: explain scatter/gather lists, that has relation to DMA */
-    memcpy(plaintext, "aloha", 6);
-    sg_init_one(&sg, plaintext, 16);
-    skcipher_request_set_crypt(req, &sg, &sg, 16, iv);
+	/* ==================== */
 
-    print_hex_dump(KERN_DEBUG, "orig text: ", DUMP_PREFIX_NONE, 16, 1,
-               plaintext, 16, true);
+	iv_encrypt = vmalloc(16);
 
-    /* Encrypt operation against "plaintext" content */
-    err = crypto_skcipher_encrypt(req);
-    if (err) {
-        pr_err("could not encrypt data\n");
-        goto error1;
-    }
+	if (!iv_encrypt) {
+		pr_err("could not allocate iv vector\n");
+		ret = -ENOMEM;
+		goto out;
+	}
 
-    sg_copy_to_buffer(&sg, 1, ciphertext, 16);
-    print_hex_dump(KERN_DEBUG, "encr text: ", DUMP_PREFIX_NONE, 16, 1,
-               ciphertext, 16, true);
+	/* Preencher espaço alocado para iv */
+	for(i = 0; i < 16; i++){
+		iv_encrypt[i] = iv[i];
+	}
+		
+	print_hex_dump(KERN_DEBUG, "IV Encrypt: ", DUMP_PREFIX_NONE, 16, 1, iv_encrypt, 16, true);
 
-    /* Time to decrypt */
-    memset(plaintext, 0, 16);
-    sg_init_one(&sg, ciphertext, 16);
+	/* ==================== */
 
-    /* Decrypt operation against the new buffer (scatterlist that holds
-     * the ciphered text). */
-    err = crypto_skcipher_decrypt(req);
-    if (err) {
-        pr_err("could not decrypt data\n");
-        goto error1;
-    }
+	/* Set message */
+	scratchpad = vmalloc(messageLength);
+	if (!scratchpad) {
+		pr_info("Could not allocate scratchpad\n");
+		goto out;
+	}
+	
+	/* Preencher espaço message */
+	memcpy(scratchpad, message, messageLength);
+	print_hex_dump(KERN_DEBUG, "Message: ", DUMP_PREFIX_NONE, 16, 1, scratchpad, 16, true);
+	
+	/* ==================== */
 
-    sg_copy_to_buffer(&sg, 1, plaintext, 16);
-    print_hex_dump(KERN_DEBUG, "decr text: ", DUMP_PREFIX_NONE, 16, 1,
-               plaintext, 16, true);
-error1:
-    skcipher_request_free(req);
-error0:
-    crypto_free_skcipher(tfm);
-    return err;
+	/* Setando struct */
+	sk.tfm = skcipher;
+    	sk.req = req;
+
+
+	/* Cifrar / Encrypt */
+	sg_init_one(&sk.sg, scratchpad, 16);
+	skcipher_request_set_crypt(req, &sk.sg, &sk.sg, 16, iv_encrypt);
+    	init_completion(&sk.result.completion);
+
+	rc = crypto_skcipher_encrypt(req);
+	
+	if(rc){
+		pr_info("skcipher encrypt returned with %d result %d\n", rc, sk.result.err);
+		goto out;
+	}
+
+    	init_completion(&sk.result.completion);
+
+	result = sg_virt(&sk.sg);
+	print_hex_dump(KERN_DEBUG, "Result Data: ", DUMP_PREFIX_NONE, 16, 1, result, 16, true);
+	
+	/* ==================== */
+
+	/* Out */
+	out:
+		if (skcipher) crypto_free_skcipher(skcipher);
+
+		if (req) skcipher_request_free(req);
+
+		if (key_encrypt) vfree(key_encrypt);
+
+		if (iv_encrypt) vfree(iv_encrypt);
+
+		if (scratchpad) vfree(scratchpad);
+
+	return 0;
 }
 
+/* Callback function */
+static void test_skcipher_cb(struct crypto_async_request *req, int error)
+{
+	struct tcrypt_result *result = req->data;
+
+	if (error == -EINPROGRESS)
+        	return;
+	result->err = error;
+	complete(&result->completion);
+	//pr_info("Encryption finished successfully\n");
+}
 static void __exit crypto_sync_exit(void)
 {
     PR_DEBUG("exiting module\n");
 }
+
+static int decrypt(char *message, int messageLength)
+{
+	struct skcipher_def sk;
+	struct crypto_skcipher *skcipher = NULL;
+   	struct skcipher_request *req = NULL;
+	int rc = 0;
+
+	int ret = -EFAULT;
+	
+	char *key_decrypt = NULL;
+	char *iv_decrypt = NULL;
+	char *scratchpad = NULL;
+	char *result = NULL;
+
+	int i;
+
+	/* ==================== */
+
+	/* Allocate a cipher handle for an skcipher */
+	skcipher = crypto_alloc_skcipher("cbc(aes)", 0, 0);
+	if (IS_ERR(skcipher)) {
+		pr_info("could not allocate skcipher handle\n");
+		return PTR_ERR(skcipher);
+	}
+
+	/* Allocate the request data structure that must be used with the skcipher encrypt and decrypt API calls */
+	req = skcipher_request_alloc(skcipher, GFP_KERNEL);
+	if (!req) {
+		pr_info("could not allocate skcipher request\n");
+		ret = -ENOMEM;
+		goto out;
+	}
+	
+	skcipher_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG, test_skcipher_cb, &sk.result);
+
+	/* ==================== */
+
+	/* Set key */
+	key_decrypt = vmalloc(16);
+
+	for(i = 0; i < 16; i++){
+		key_decrypt[i] = key[i];
+	}
+
+	if (crypto_skcipher_setkey(skcipher, key_decrypt, 16)) {
+   	     pr_err("fail setting key");
+   	     goto out;
+	}
+	print_hex_dump(KERN_DEBUG, "Key_encrypt: ", DUMP_PREFIX_NONE, 16, 1, key_decrypt, 16, true);
+
+	/* ==================== */
+
+	iv_decrypt = vmalloc(16);
+
+	if (!iv_decrypt) {
+		pr_err("could not allocate iv vector\n");
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	/* Preencher espaço alocado para iv */
+	for(i = 0; i < 16; i++){
+		iv_decrypt[i] = iv[i];
+	}
+		
+	print_hex_dump(KERN_DEBUG, "IV Encrypt: ", DUMP_PREFIX_NONE, 16, 1, iv_decrypt, 16, true);
+
+	/* ==================== */
+
+	/* Set message */
+	scratchpad = vmalloc(messageLength);
+	if (!scratchpad) {
+		pr_info("Could not allocate scratchpad\n");
+		goto out;
+	}
+	
+	/* Preencher espaço message */
+	memcpy(scratchpad, message, messageLength);
+	print_hex_dump(KERN_DEBUG, "Message: ", DUMP_PREFIX_NONE, 16, 1, scratchpad, 16, true);
+	
+	/* ==================== */
+
+	/* Setando struct */
+	sk.tfm = skcipher;
+    	sk.req = req;
+
+
+	/* Cifrar / Encrypt */
+	sg_init_one(&sk.sg, scratchpad, 16);
+	skcipher_request_set_crypt(req, &sk.sg, &sk.sg, 16, iv_decrypt);
+    	init_completion(&sk.result.completion);
+
+	rc = crypto_skcipher_decrypt(req);
+	
+	if(rc){
+		pr_info("skcipher encrypt returned with %d result %d\n", rc, sk.result.err);
+		goto out;
+	}
+
+    	init_completion(&sk.result.completion);
+
+	result = sg_virt(&sk.sg);
+	print_hex_dump(KERN_DEBUG, "Result Data: ", DUMP_PREFIX_NONE, 16, 1, result, 16, true);
+	
+	/* ==================== */
+
+	/* Out */
+	out:
+		if (skcipher) crypto_free_skcipher(skcipher);
+
+		if (req) skcipher_request_free(req);
+
+		if (key_decrypt) vfree(key_decrypt);
+
+		if (iv_decrypt) vfree(iv_decrypt);
+
+		if (scratchpad) vfree(scratchpad);
+
+	return 0;
+}
+
+/* ================================================== */
+
+static int hash(char *message, int messageLength)
+{
 	
 
 
