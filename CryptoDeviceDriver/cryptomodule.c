@@ -28,7 +28,7 @@ MODULE_VERSION("1.0");
 /* ================================================== */
 
 static int majorNumber;                    /* device number -> determinado automaticamente */
-static char message[256] = {0};            /* string recebida do usuario (userspace) */
+static char message[258] = {0};            /* string recebida do usuario (userspace) */
 static short size_of_message;              /* tamanho da string recebida do usuario */
 static int numberOpens = 0;                /* Vezes que o device foi aberto */
 static struct class *cryptoClass = NULL;   /* device-driver class struct pointer */
@@ -42,7 +42,7 @@ struct tcrypt_result {
 
 struct skcipher_def {
     struct scatterlist sg;
-    struct crypto_skcipher *tfm;
+    struct crypto_skcipher *skcipher;
     struct skcipher_request *req;
     struct tcrypt_result result;
 };
@@ -79,10 +79,7 @@ static struct file_operations fops = {
 static int encrypt(char *message, int messageLength);
 static int decrypt(char *message, int messageLength);
 static int hash(char *message, int messageLength);
-
 static void test_skcipher_cb(struct crypto_async_request *req, int error);
-//static int setKey(char *p_key, struct crypto_skcipher *skcipher);
-//static int setIv(char *p_iv, int ret);
 
 /* ================================================== */
 
@@ -143,8 +140,8 @@ static void __exit crypto_exit(void)
 static int dev_open(struct inode *inodep, struct file *filep)
 {
 	if (!mutex_trylock(&crypto_mutex))
-	{ /// Try to acquire the mutex (i.e., put the lock on/down)
-		/// returns 1 if successful and 0 if there is contention
+	{ // Try to acquire the mutex (i.e., put the lock on/down)
+		// returns 1 if successful and 0 if there is contention
         	printk(KERN_ALERT "Crypto Module: Device in use by another process");
         	return -EBUSY;
 	}
@@ -294,7 +291,7 @@ static int encrypt(char message[], int messageLength)
 	/* ==================== */
 
 	/* Setando struct */
-	sk.tfm = skcipher;
+	sk.skcipher = skcipher;
     	sk.req = req;
 
 
@@ -330,18 +327,6 @@ static int encrypt(char message[], int messageLength)
 		if (scratchpad) vfree(scratchpad);
 
 	return 0;
-}
-
-/* Callback function */
-static void test_skcipher_cb(struct crypto_async_request *req, int error)
-{
-	struct tcrypt_result *result = req->data;
-
-	if (error == -EINPROGRESS)
-        	return;
-	result->err = error;
-	complete(&result->completion);
-	//pr_info("Encryption finished successfully\n");
 }
 
 /* ================================================== */
@@ -429,7 +414,7 @@ static int decrypt(char *message, int messageLength)
 	/* ==================== */
 
 	/* Setando struct */
-	sk.tfm = skcipher;
+	sk.skcipher = skcipher;
     	sk.req = req;
 
 
@@ -472,6 +457,20 @@ static int decrypt(char *message, int messageLength)
 static int hash(char *message, int messageLength)
 {
 	return 0;
+}
+
+/* ================================================== */
+
+/* Callback function */
+static void test_skcipher_cb(struct crypto_async_request *req, int error)
+{
+	struct tcrypt_result *result = req->data;
+
+	if (error == -EINPROGRESS)
+        	return;
+	result->err = error;
+	complete(&result->completion);
+	//pr_info("Encryption finished successfully\n");
 }
 
 /* ================================================== */
