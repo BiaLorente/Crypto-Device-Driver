@@ -15,9 +15,11 @@
 #include <crypto/skcipher.h>
 #include <linux/err.h>
 #include <linux/vmalloc.h>
+#include <crypto/hash.h>
 
 #define DEVICE_NAME "crypto" /* /dev/crypto */
 #define CLASS_NAME "cry"     /* The device class */
+#define SHA1_SIZE 20
 
 MODULE_LICENSE("GPL");                    
 MODULE_AUTHOR("-----");                   
@@ -55,9 +57,9 @@ char *key;
 char *iv;
 
 module_param(key, charp, 0000);
-MODULE_PARM_DESC(key, "Chave para o algoritmo AES-CBC");
+MODULE_PARM_DESC(key, "Chave para o algoritmo");
 module_param(iv, charp, 0000);
-MODULE_PARM_DESC(iv, "Vetor de inicialização para o algoritmo AES-CBC");
+MODULE_PARM_DESC(iv, "Vetor de inicialização para o algoritmo");
 
 /* ================================================== */
 
@@ -80,6 +82,7 @@ static int encrypt(char *message, int messageLength);
 static int decrypt(char *message, int messageLength);
 static int hash(char *message, int messageLength);
 static void test_skcipher_cb(struct crypto_async_request *req, int error);
+void clearMessage(char *message);
 
 /* ================================================== */
 
@@ -175,10 +178,11 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
 
 static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset)
 {
+	clearMessage(message);
+
 	sprintf(message, "%s", buffer); // appending received string with its length
 	size_of_message = strlen(message);                // store the length of the stored message
 	printk(KERN_INFO "Crypto Module: Received %zu characters from the user\n", len);
-
 	switch(message[size_of_message - 1]){
 
 		case 'c':
@@ -222,8 +226,6 @@ static int encrypt(char message[], int messageLength)
 	char *scratchpad = NULL;
 	char *result = NULL;
 
-	int i;
-
 	/* ==================== */
 
 	/* Allocate a cipher handle for an skcipher */
@@ -245,18 +247,15 @@ static int encrypt(char message[], int messageLength)
 
 	/* ==================== */
 
-	/* Set key */
 	key_encrypt = vmalloc(16);
 
-	for(i = 0; i < 16; i++){
-		key_encrypt[i] = key[i];
-	}
+	strcpy(key_encrypt, key);
 
 	if (crypto_skcipher_setkey(skcipher, key_encrypt, 16)) {
    	     pr_err("fail setting key");
    	     goto out;
 	}
-	print_hex_dump(KERN_DEBUG, "Key_encrypt: ", DUMP_PREFIX_NONE, 16, 1, key_encrypt, 16, true);
+	//print_hex_dump(KERN_DEBUG, "Key Encrypt: ", DUMP_PREFIX_NONE, 16, 1, key_encrypt, 16, true);
 
 	/* ==================== */
 
@@ -268,32 +267,26 @@ static int encrypt(char message[], int messageLength)
 		goto out;
 	}
 
-	/* Preencher espaço alocado para iv */
-	for(i = 0; i < 16; i++){
-		iv_encrypt[i] = iv[i];
-	}
+	strcpy(iv_encrypt, iv);
 		
-	print_hex_dump(KERN_DEBUG, "IV Encrypt: ", DUMP_PREFIX_NONE, 16, 1, iv_encrypt, 16, true);
+	//print_hex_dump(KERN_DEBUG, "IV Encrypt: ", DUMP_PREFIX_NONE, 16, 1, iv_encrypt, 16, true);
 
 	/* ==================== */
 
-	/* Set message */
 	scratchpad = vmalloc(messageLength);
 	if (!scratchpad) {
 		pr_info("Could not allocate scratchpad\n");
 		goto out;
 	}
 	
-	/* Preencher espaço message */
 	memcpy(scratchpad, message, messageLength);
-	print_hex_dump(KERN_DEBUG, "Message: ", DUMP_PREFIX_NONE, 16, 1, scratchpad, 16, true);
+	//print_hex_dump(KERN_DEBUG, "Message Encrypt: ", DUMP_PREFIX_NONE, 16, 1, scratchpad, 16, true);
 	
 	/* ==================== */
 
 	/* Setando struct */
 	sk.skcipher = skcipher;
     	sk.req = req;
-
 
 	/* Cifrar / Encrypt */
 	sg_init_one(&sk.sg, scratchpad, 16);
@@ -310,8 +303,13 @@ static int encrypt(char message[], int messageLength)
     	init_completion(&sk.result.completion);
 
 	result = sg_virt(&sk.sg);
-	print_hex_dump(KERN_DEBUG, "Result Data: ", DUMP_PREFIX_NONE, 16, 1, result, 16, true);
-	
+
+	strcpy(message, result);
+	printk("========================================");
+	print_hex_dump(KERN_DEBUG, "Result Data Encrypt: ", DUMP_PREFIX_NONE, 16, 1, result, 16, true);
+	//print_hex_dump(KERN_DEBUG, "Result Data Encrypt 2: ", DUMP_PREFIX_NONE, 16, 1, message, 16, true);
+	printk("========================================");
+
 	/* ==================== */
 
 	/* Out */
@@ -345,8 +343,6 @@ static int decrypt(char *message, int messageLength)
 	char *scratchpad = NULL;
 	char *result = NULL;
 
-	int i;
-
 	/* ==================== */
 
 	/* Allocate a cipher handle for an skcipher */
@@ -371,15 +367,13 @@ static int decrypt(char *message, int messageLength)
 	/* Set key */
 	key_decrypt = vmalloc(16);
 
-	for(i = 0; i < 16; i++){
-		key_decrypt[i] = key[i];
-	}
+	strcpy(key_decrypt, key);
 
 	if (crypto_skcipher_setkey(skcipher, key_decrypt, 16)) {
    	     pr_err("fail setting key");
    	     goto out;
 	}
-	print_hex_dump(KERN_DEBUG, "Key_encrypt: ", DUMP_PREFIX_NONE, 16, 1, key_decrypt, 16, true);
+	//print_hex_dump(KERN_DEBUG, "Key Decrypt: ", DUMP_PREFIX_NONE, 16, 1, key_decrypt, 16, true);
 
 	/* ==================== */
 
@@ -391,12 +385,9 @@ static int decrypt(char *message, int messageLength)
 		goto out;
 	}
 
-	/* Preencher espaço alocado para iv */
-	for(i = 0; i < 16; i++){
-		iv_decrypt[i] = iv[i];
-	}
+	strcpy(iv_decrypt, iv);
 		
-	print_hex_dump(KERN_DEBUG, "IV Encrypt: ", DUMP_PREFIX_NONE, 16, 1, iv_decrypt, 16, true);
+	//print_hex_dump(KERN_DEBUG, "IV Decrypt: ", DUMP_PREFIX_NONE, 16, 1, iv_decrypt, 16, true);
 
 	/* ==================== */
 
@@ -407,9 +398,8 @@ static int decrypt(char *message, int messageLength)
 		goto out;
 	}
 	
-	/* Preencher espaço message */
 	memcpy(scratchpad, message, messageLength);
-	print_hex_dump(KERN_DEBUG, "Message: ", DUMP_PREFIX_NONE, 16, 1, scratchpad, 16, true);
+	//print_hex_dump(KERN_DEBUG, "Message decrypt: ", DUMP_PREFIX_NONE, 16, 1, scratchpad, 16, true);
 	
 	/* ==================== */
 
@@ -418,7 +408,7 @@ static int decrypt(char *message, int messageLength)
     	sk.req = req;
 
 
-	/* Cifrar / Encrypt */
+	/* Decifrar / Decrypt */
 	sg_init_one(&sk.sg, scratchpad, 16);
 	skcipher_request_set_crypt(req, &sk.sg, &sk.sg, 16, iv_decrypt);
     	init_completion(&sk.result.completion);
@@ -433,7 +423,9 @@ static int decrypt(char *message, int messageLength)
     	init_completion(&sk.result.completion);
 
 	result = sg_virt(&sk.sg);
-	print_hex_dump(KERN_DEBUG, "Result Data: ", DUMP_PREFIX_NONE, 16, 1, result, 16, true);
+	printk("====================");
+	print_hex_dump(KERN_DEBUG, "Result Data Decrypt: ", DUMP_PREFIX_NONE, 16, 1, result, 16, true);
+	printk("====================");
 	
 	/* ==================== */
 
@@ -456,6 +448,32 @@ static int decrypt(char *message, int messageLength)
 
 static int hash(char *message, int messageLength)
 {
+	struct shash_desc *shash; 
+	struct crypto_shash *req; 
+	char *result = NULL;
+	int ret;
+	
+	req = crypto_alloc_shash("sha1", 0, 0);
+	shash = vmalloc(sizeof(struct shash_desc));
+	if (!shash)
+        	goto out;
+	
+	shash->tfm = req;
+    	shash->flags = 0x0;
+	
+	result = vmalloc(SHA1_SIZE);
+	if(!result) goto out;
+
+	ret = crypto_shash_digest(shash, message, messageLength, result);
+	strcpy(message, result);
+
+	print_hex_dump(KERN_DEBUG, "Result Data Hash: ", DUMP_PREFIX_NONE, 16, 1, result, 16, true);
+
+	out:
+		if(req) crypto_free_shash(req);
+		if(shash) vfree(shash);
+		if(result) vfree(result);
+		
 	return 0;
 }
 
@@ -475,5 +493,15 @@ static void test_skcipher_cb(struct crypto_async_request *req, int error)
 
 /* ================================================== */
 
+void clearMessage(char *message)
+{
+	int i;
+	for (i = 0; i < strlen(message); i++)
+	{
+		message[i] = '\0';
+	}
+}
+
+/* ================================================== */
 module_init(crypto_init);
 module_exit(crypto_exit);
