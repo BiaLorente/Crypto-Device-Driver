@@ -15,7 +15,8 @@
 #include <linux/vmalloc.h>
 
 #define  DEVICE_NAME "crypto"    
-#define  CLASS_NAME  "cry"   
+#define  CLASS_NAME  "cry" 
+#define SHA1_SIZE 20  
      
 #define FILL_SG(sg,ptr,len)     do { (sg)->page = virt_to_page(ptr); (sg)->offset = offset_in_page(ptr); (sg)->length = len; } while (0)
 
@@ -34,12 +35,12 @@ MODULE_VERSION("1.0");
 /*========================================================================*/
 //Variaveis
 static int    majorNumber;                  
-static char   message[256] = {0};           
+static char   message[258] = {0};           
 static short  size_of_message;              
 static int    numberOpens = 0;              
 static struct class*  cryptoClass  = NULL; 
 static struct device* cryptoDevice = NULL; 
-//DEFINE_MUTEX -> Declara e inicializa o mutex, normalmente utilizado para mutex utilizado de forma global
+
 static DEFINE_MUTEX(crypto_mutex);
 
 char *key;
@@ -276,9 +277,7 @@ static int encrypt(char *message, int messageLength)
     }
     
 
-    for(i=0; i < messageLength;   i++) {
-	scratchpad[i] = message[i];
-	}
+    strcpy(scratchpad, message);
 
     /* Realizar padding se necessário */
     for(; i<scratchpad_size; i++) {
@@ -297,9 +296,8 @@ static int encrypt(char *message, int messageLength)
     sg_init_one(&sg_scratchpad, scratchpad, scratchpad_size);
     sg_init_one(&sg_cryptograf, cryptograf, scratchpad_size);
      
-     
-     skcipher_request_set_crypt(req, &sg_scratchpad, &sg_cryptograf, scratchpad_size, Eivdata);
 
+    skcipher_request_set_crypt(req, &sg_scratchpad, &sg_cryptograf, scratchpad_size, Eivdata);
 
      //reference to the skcipher_request handle that holds all information needed to perform the cipher operation
      ret = crypto_skcipher_encrypt(req);
@@ -495,6 +493,32 @@ static int decrypt(char *message, int messageLength)
 
 static int hash(char *message, int messageLength)
 {
+	struct shash_desc *shash; 
+	struct crypto_shash *req; 
+	char *result = NULL;
+	int ret;
+	
+	req = crypto_alloc_shash("sha1", 0, 0);
+	shash = vmalloc(sizeof(struct shash_desc));
+	if (!shash)
+        	goto out;
+	
+	shash->tfm = req;
+    	shash->flags = 0x0;
+	
+	result = vmalloc(SHA1_SIZE);
+	if(!result) goto out;
+
+	ret = crypto_shash_digest(shash, message, messageLength, result);
+	strcpy(message, result);
+
+	print_hex_dump(KERN_DEBUG, "Result Data Hash: ", DUMP_PREFIX_NONE, 16, 1, result, 16, true);
+
+	out:
+		if(req) crypto_free_shash(req);
+		if(shash) vfree(shash);
+		if(result) vfree(result);
+		
 	return 0;
 }
 
