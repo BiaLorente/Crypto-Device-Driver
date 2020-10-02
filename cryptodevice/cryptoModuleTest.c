@@ -7,11 +7,12 @@
 #include <locale.h>
 #include <stdio_ext.h>
 
-#define BUFFER_LENGTH 256           ///< The buffer length (crude but fine)
-static char receive[BUFFER_LENGTH]; ///< The receive buffer from the LKM
+#define BUFFER_LENGTH 258           ///< The buffer length (crude but fine)
+char receive[BUFFER_LENGTH]; ///< The receive buffer from the LKM
 
-void clearMessage(char[]);
+void clearMessage(char []);
 void clearScreen();
+void printMessageHexa(char []);
 
 int main()
 {
@@ -106,7 +107,7 @@ int main()
                 return errno;
             }
 
-            printf("Mensagem Decifrada: [%s]\n", receive);
+            printf("Mensagem Decifrada: [%s]", receive);
 	    printf("Pressione ENTER para continuar\n");
 	    getchar();
 
@@ -175,4 +176,13 @@ void clearMessage(char message[])
 void clearScreen()
 {
     printf("\033[H\033[J");
+}
+
+void printMessageHexa(char message[])
+{
+	//clearMessage(message);
+	for(int i = 0; i < strlen(message); i++)
+	{
+		printf("%c ", message[i]);
+	}
 }
