@@ -1,17 +1,12 @@
-obj-m += cryptomodule.o
+obj-m+=cryptomodule.o
 
 all:
-	#compilar módulo
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
-	sudo insmod cryptomodule.ko
-
-	#compilar programa em espaço de usuario
+	make -C /lib/modules/$(shell uname -r)/build/ M=$(PWD) modules
+	sudo insmod cryptomodule.ko key="0123456789ABCDEF" iv="0123456789ABCDEF"
 	$(CC) cryptoModuleTest.c -o test
-	./test
-
+	sudo ./test
+	
 clean:
-	#remover módulo
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
-
-	#remover programa em espaço de usuário
-	rm test
+	sudo rmmod cryptomodule
+	sudo rm test
+	make -C /lib/modules/$(shell uname -r)/build/ M=$(PWD) clean
