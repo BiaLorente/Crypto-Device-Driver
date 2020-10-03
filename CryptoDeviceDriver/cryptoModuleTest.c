@@ -12,7 +12,7 @@ static char receive[BUFFER_LENGTH]; ///< The receive buffer from the LKM
 
 void clearMessage(char[]);
 void clearScreen();
-void dumpHex(const void*, size_t);
+void dumpHex(const void *, size_t);
 
 int main()
 {
@@ -22,7 +22,7 @@ int main()
     int option1, option2;
     char messageToSend[BUFFER_LENGTH];
     char messageToPrint[BUFFER_LENGTH];
-    
+
     if ((fd = open("/dev/crypto", O_RDWR)) < 0)
     {
         perror("Failed to open the device...");
@@ -32,11 +32,11 @@ int main()
     do
     {
 
-	clearMessage(messageToSend);
-	clearMessage(receive);
-	clearMessage(messageToPrint);
-        	
-	do
+        clearMessage(messageToSend);
+        clearMessage(receive);
+        clearMessage(messageToPrint);
+
+        do
         {
             clearScreen();
             printf("====================\n");
@@ -47,7 +47,7 @@ int main()
             printf("====================\n");
             printf("Digite a opção desejada: ");
             scanf("%d", &option2);
-	    getchar();
+            getchar();
 
         } while (option2 < 0 || option2 > 3);
 
@@ -63,9 +63,9 @@ int main()
             clearScreen();
             printf("Digite a mensagem para ser cifrada: ");
             scanf("%[^\n]%*c", messageToSend);
-	    strcat(messageToSend," c");
-            
-	    if ((ret = write(fd, messageToSend, strlen(messageToSend))) < 0)
+            strcat(messageToSend, " c");
+
+            if ((ret = write(fd, messageToSend, strlen(messageToSend))) < 0)
             {
                 perror("Falha ao enviar mensagem");
                 return errno;
@@ -80,19 +80,19 @@ int main()
                 return errno;
             }
 
-	    printf("String enviada: %s\n", messageToSend);
-	    dumpHex(receive, strlen(receive));
-	    printf("\nPressione ENTER para continuar\n");
-	    getchar();
+            printf("String enviada: %s\n", messageToSend);
+            dumpHex(receive, strlen(receive));
+            printf("\nPressione ENTER para continuar\n");
+            getchar();
 
             break;
 
         case 2: //Decifrar
-	    
-	    clearScreen();
+
+            clearScreen();
             printf("Digite a mensagem para ser decifrada: ");
             scanf("%[^\n]%*c", messageToSend);
-	    strcat(messageToSend," d");
+            strcat(messageToSend, " d");
 
             if ((ret = write(fd, messageToSend, strlen(messageToSend))) < 0)
             {
@@ -110,17 +110,17 @@ int main()
             }
 
             //printf("Mensagem Decifrada: [%s]", receive);
-	    printf("Pressione ENTER para continuar\n");
-	    getchar();
+            printf("Pressione ENTER para continuar\n");
+            getchar();
 
             break;
 
         case 3: //Hash
 
-	    clearScreen();
+            clearScreen();
             printf("Digite a mensagem para calcular o hash: ");
             scanf("%[^\n]%*c", messageToSend);
-	    strcat(messageToSend," h");
+            strcat(messageToSend, " h");
 
             if ((ret = write(fd, messageToSend, strlen(messageToSend))) < 0)
             {
@@ -137,10 +137,10 @@ int main()
                 return errno;
             }
 
-	    printf("Resumo critográfico: ");
+            printf("Resumo critográfico: ");
             dumpHex(receive, strlen(receive));
-	    printf("\nPressione ENTER para continuar\n");
-	    getchar();
+            printf("\nPressione ENTER para continuar\n");
+            getchar();
 
             break;
             break;
@@ -153,14 +153,14 @@ int main()
         printf("====================\n");
         printf("Digite a opção desejada: ");
         scanf("%d", &option1);
-	getchar();
+        getchar();
 
     } while (option1 != 0);
 
-    if((ret = close(fd)) < 0)
+    if ((ret = close(fd)) < 0)
     {
-    	perror("Erro ao fechar o arquivo");
-	return errno;
+        perror("Erro ao fechar o arquivo");
+        return errno;
     }
 
     return 0;
@@ -181,31 +181,42 @@ void clearScreen()
     printf("\033[H\033[J");
 }
 
-void dumpHex(const void* data, size_t size) {
-	char ascii[45];
-	size_t i, j;
-	ascii[45] = '\0';
-	for (i = 0; i < size; ++i) {
-		printf("%02X ", ((unsigned char*)data)[i]);
-		if (((unsigned char*)data)[i] >= ' ' && ((unsigned char*)data)[i] <= '~') {
-			ascii[i % 16] = ((unsigned char*)data)[i];
-		} else {
-			ascii[i % 16] = '.';
-		}
-		if ((i+1) % 8 == 0 || i+1 == size) {
-			printf(" ");
-			if ((i+1) % 16 == 0) {
-				//printf("|  %s \n", ascii);
-			} else if (i+1 == size) {
-				ascii[(i+1) % 16] = '\0';
-				if ((i+1) % 16 <= 8) {
-					printf(" ");
-				}
-				for (j = (i+1) % 16; j < 16; ++j) {
-					printf("   ");
-				}
-				//printf("|  %s \n", ascii);
-			}
-		}
-	}
+void dumpHex(const void *data, size_t size)
+{
+    char ascii[45];
+    size_t i, j;
+    ascii[45] = '\0';
+    for (i = 0; i < size; ++i)
+    {
+        printf("%02X ", ((unsigned char *)data)[i]);
+        if (((unsigned char *)data)[i] >= ' ' && ((unsigned char *)data)[i] <= '~')
+        {
+            ascii[i % 16] = ((unsigned char *)data)[i];
+        }
+        else
+        {
+            ascii[i % 16] = '.';
+        }
+        if ((i + 1) % 8 == 0 || i + 1 == size)
+        {
+            printf(" ");
+            if ((i + 1) % 16 == 0)
+            {
+                //printf("|  %s \n", ascii);
+            }
+            else if (i + 1 == size)
+            {
+                ascii[(i + 1) % 16] = '\0';
+                if ((i + 1) % 16 <= 8)
+                {
+                    printf(" ");
+                }
+                for (j = (i + 1) % 16; j < 16; ++j)
+                {
+                    printf("   ");
+                }
+                //printf("|  %s \n", ascii);
+            }
+        }
+    }
 }
