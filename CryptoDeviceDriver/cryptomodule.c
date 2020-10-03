@@ -181,8 +181,9 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
 	clearMessage(message);
 
 	sprintf(message, "%s", buffer); // appending received string with its length
-	size_of_message = strlen(message);                // store the length of the stored message
+	size_of_message = strlen(message); // store the length of the stored message
 	printk(KERN_INFO "Crypto Module: Received %zu characters from the user\n", len);
+
 	switch(message[size_of_message - 1]){
 
 		case 'c':
@@ -461,7 +462,7 @@ static int hash(char *message, int messageLength)
 	shash->tfm = req;
     	shash->flags = 0x0;
 	
-	result = vmalloc(SHA1_SIZE);
+	result = vmalloc(SHA1_SIZE*2);
 	if(!result) goto out;
 
 	ret = crypto_shash_digest(shash, message, messageLength, result);
@@ -503,5 +504,6 @@ void clearMessage(char *message)
 }
 
 /* ================================================== */
+
 module_init(crypto_init);
 module_exit(crypto_exit);

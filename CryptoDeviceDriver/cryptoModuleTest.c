@@ -8,11 +8,11 @@
 #include <stdio_ext.h>
 
 #define BUFFER_LENGTH 258           ///< The buffer length (crude but fine)
-char receive[BUFFER_LENGTH]; ///< The receive buffer from the LKM
+static char receive[BUFFER_LENGTH]; ///< The receive buffer from the LKM
 
-void clearMessage(char []);
+void clearMessage(char[]);
 void clearScreen();
-void printMessageHexa(char []);
+void dumpHex(const void*, size_t);
 
 int main()
 {
@@ -21,7 +21,7 @@ int main()
     int ret, fd;
     int option1, option2;
     char messageToSend[BUFFER_LENGTH];
-
+    char messageToPrint[BUFFER_LENGTH];
     
     if ((fd = open("/dev/crypto", O_RDWR)) < 0)
     {
@@ -34,6 +34,7 @@ int main()
 
 	clearMessage(messageToSend);
 	clearMessage(receive);
+	clearMessage(messageToPrint);
         	
 	do
         {
@@ -79,8 +80,9 @@ int main()
                 return errno;
             }
 
-            printf("Mensagem Cifrada: [%s]\n", receive);
-	    printf("Pressione ENTER para continuar\n");
+	    printf("String enviada: %s\n", messageToSend);
+	    dumpHex(receive, strlen(receive));
+	    printf("\nPressione ENTER para continuar\n");
 	    getchar();
 
             break;
@@ -107,7 +109,7 @@ int main()
                 return errno;
             }
 
-            printf("Mensagem Decifrada: [%s]", receive);
+            //printf("Mensagem Decifrada: [%s]", receive);
 	    printf("Pressione ENTER para continuar\n");
 	    getchar();
 
@@ -135,8 +137,9 @@ int main()
                 return errno;
             }
 
-            printf("Cálculo Hash: [%s]\n", receive);
-	    printf("Pressione ENTER para continuar\n");
+	    printf("Resumo critográfico: ");
+            dumpHex(receive, strlen(receive));
+	    printf("\nPressione ENTER para continuar\n");
 	    getchar();
 
             break;
@@ -178,11 +181,31 @@ void clearScreen()
     printf("\033[H\033[J");
 }
 
-void printMessageHexa(char message[])
-{
-	//clearMessage(message);
-	for(int i = 0; i < strlen(message); i++)
-	{
-		printf("%c ", message[i]);
+void dumpHex(const void* data, size_t size) {
+	char ascii[45];
+	size_t i, j;
+	ascii[45] = '\0';
+	for (i = 0; i < size; ++i) {
+		printf("%02X ", ((unsigned char*)data)[i]);
+		if (((unsigned char*)data)[i] >= ' ' && ((unsigned char*)data)[i] <= '~') {
+			ascii[i % 16] = ((unsigned char*)data)[i];
+		} else {
+			ascii[i % 16] = '.';
+		}
+		if ((i+1) % 8 == 0 || i+1 == size) {
+			printf(" ");
+			if ((i+1) % 16 == 0) {
+				//printf("|  %s \n", ascii);
+			} else if (i+1 == size) {
+				ascii[(i+1) % 16] = '\0';
+				if ((i+1) % 16 <= 8) {
+					printf(" ");
+				}
+				for (j = (i+1) % 16; j < 16; ++j) {
+					printf("   ");
+				}
+				//printf("|  %s \n", ascii);
+			}
+		}
 	}
 }
