@@ -162,6 +162,7 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
 {
 	int error_count = 0;
 	// copy_to_user has the format ( * to, *from, size) and returns 0 on success
+	clearMessage(buffer);
 	error_count = copy_to_user(buffer, message, size_of_message);
 
 	if (error_count == 0)
@@ -262,7 +263,6 @@ static int encrypt(char message[], int messageLength)
 		pr_err("fail setting key");
 		goto out;
 	}
-	//print_hex_dump(KERN_DEBUG, "Key Encrypt: ", DUMP_PREFIX_NONE, 16, 1, key_encrypt, 16, true);
 
 	/* ==================== */
 
@@ -277,8 +277,6 @@ static int encrypt(char message[], int messageLength)
 
 	strcpy(iv_encrypt, iv);
 
-	//print_hex_dump(KERN_DEBUG, "IV Encrypt: ", DUMP_PREFIX_NONE, 16, 1, iv_encrypt, 16, true);
-
 	/* ==================== */
 
 	scratchpad = vmalloc(messageLength);
@@ -289,7 +287,6 @@ static int encrypt(char message[], int messageLength)
 	}
 
 	memcpy(scratchpad, message, messageLength);
-	//print_hex_dump(KERN_DEBUG, "Message Encrypt: ", DUMP_PREFIX_NONE, 16, 1, scratchpad, 16, true);
 
 	/* ==================== */
 
@@ -317,13 +314,11 @@ static int encrypt(char message[], int messageLength)
 	strcpy(message, result);
 	printk("========================================");
 	print_hex_dump(KERN_DEBUG, "Result Data Encrypt: ", DUMP_PREFIX_NONE, 16, 1, result, 16, true);
-	//print_hex_dump(KERN_DEBUG, "Result Data Encrypt 2: ", DUMP_PREFIX_NONE, 16, 1, message, 16, true);
 	printk("========================================");
 
-/* ==================== */
+	/* ==================== */
 
-/* Out */
-out:
+	out:
 	if (skcipher)
 		crypto_free_skcipher(skcipher);
 
@@ -391,7 +386,6 @@ static int decrypt(char *message, int messageLength)
 		pr_err("fail setting key");
 		goto out;
 	}
-	//print_hex_dump(KERN_DEBUG, "Key Decrypt: ", DUMP_PREFIX_NONE, 16, 1, key_decrypt, 16, true);
 
 	/* ==================== */
 
@@ -406,8 +400,6 @@ static int decrypt(char *message, int messageLength)
 
 	strcpy(iv_decrypt, iv);
 
-	//print_hex_dump(KERN_DEBUG, "IV Decrypt: ", DUMP_PREFIX_NONE, 16, 1, iv_decrypt, 16, true);
-
 	/* ==================== */
 
 	/* Set message */
@@ -419,7 +411,6 @@ static int decrypt(char *message, int messageLength)
 	}
 
 	memcpy(scratchpad, message, messageLength);
-	//print_hex_dump(KERN_DEBUG, "Message decrypt: ", DUMP_PREFIX_NONE, 16, 1, scratchpad, 16, true);
 
 	/* ==================== */
 
@@ -449,10 +440,9 @@ static int decrypt(char *message, int messageLength)
 	print_hex_dump(KERN_DEBUG, "Result Data Decrypt: ", DUMP_PREFIX_NONE, 16, 1, result, 16, true);
 	printk("====================");
 
-/* ==================== */
+	/* ==================== */
 
-/* Out */
-out:
+	out:
 	if (skcipher)
 		crypto_free_skcipher(skcipher);
 
@@ -495,9 +485,13 @@ static int hash(char *message, int messageLength)
 	ret = crypto_shash_digest(shash, message, messageLength, result);
 	strcpy(message, result);
 
+	printk("====================");
 	print_hex_dump(KERN_DEBUG, "Result Data Hash: ", DUMP_PREFIX_NONE, 16, 1, result, 16, true);
+	printk("====================");
 
-out:
+	/* ==================== */
+
+	out:
 	if (req)
 		crypto_free_shash(req);
 	if (shash)
@@ -534,6 +528,8 @@ void clearMessage(char *message)
 }
 
 /* ================================================== */
+
+190500aed64f8806df503ec12e8eea37
 
 module_init(crypto_init);
 module_exit(crypto_exit);
