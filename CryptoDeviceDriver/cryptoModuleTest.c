@@ -126,7 +126,7 @@ int main()
 	    printf("Digite a mensagem para ser decifrada: ");
 	    scanf("%[^\n]%*c", messageToSend);
 	    strcpy(messageToPrint, messageToSend);
-	    strcat(messageToSend, " d");
+	    strcat(messageToSend, " h");
 
 	    if ((ret = write(fd, messageToSend, strlen(messageToSend))) < 0)
 	    {
