@@ -210,7 +210,6 @@ void dumpHex(const void *message, int algorithm)
         }
         if ((i + 1) % 8 == 0 || i + 1 == strlen(message))
         {
-            printf(" ");
             if ((i + 1) % strlen(message) == 0)
             {
 	        if(algorithm == 2)
@@ -219,15 +218,6 @@ void dumpHex(const void *message, int algorithm)
             else if (i + 1 == strlen(message))
             {
                 ascii[(i + 1) % strlen(message)] = '\0';
-                if ((i + 1) % strlen(message) <= 8)
-                {
-                    printf(" ");
-                }
-                for (j = (i + 1) % strlen(message); j < strlen(message); ++j)
-                {
-                    printf("   ");
-                }
-
 		if(algorithm == 2)
                 printf("\n%s\n", ascii);
             }
