@@ -53,8 +53,6 @@ struct skcipher_def
 
 /* ================================================== */
 
-//insmod cryptomodule.ko key=”0123456789ABCDEF” iv=”0123456789ABCDEF”
-
 char *key;
 char *iv;
 
@@ -528,8 +526,6 @@ void clearMessage(char *message)
 }
 
 /* ================================================== */
-
-190500aed64f8806df503ec12e8eea37
 
 module_init(crypto_init);
 module_exit(crypto_exit);

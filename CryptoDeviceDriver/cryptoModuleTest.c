@@ -7,7 +7,7 @@
 #include <locale.h>
 #include <stdio_ext.h>
 
-#define BUFFER_LENGTH 258           ///< The buffer length (crude but fine)
+#define BUFFER_LENGTH 256         ///< The buffer length (crude but fine)
 static char receive[BUFFER_LENGTH]; ///< The receive buffer from the LKM
 
 void clearMessage(char[]);
@@ -20,8 +20,8 @@ int main()
 
     int ret, fd;
     int option1, option2;
-    char messageToSend[BUFFER_LENGTH];
-    char messageToPrint[BUFFER_LENGTH-2];
+    char messageToSend[BUFFER_LENGTH+2];
+    char messageToPrint[BUFFER_LENGTH];
 
     if ((fd = open("/dev/crypto", O_RDWR)) < 0)
     {
@@ -82,8 +82,9 @@ int main()
             }
 
             printf("String enviada: %s\n", messageToPrint);
+	    printf("Mensagem cifrada: ");
             dumpHex(receive, option2);
-            printf("\nPressione ENTER para continuar\n");
+            printf("\n\nPressione ENTER para continuar\n");
             getchar();
 
             break;
@@ -91,16 +92,16 @@ int main()
         case 2: //Decifrar
 
             clearScreen();
-            printf("Digite a mensagem para ser decifrada: ");
-            scanf("%[^\n]%*c", messageToSend);
+	    printf("Digite a mensagem para ser decifrada: ");
+	    scanf("%[^\n]%*c", messageToSend);
 	    strcpy(messageToPrint, messageToSend);
-            strcat(messageToSend, " d");
+	    strcat(messageToSend, " d");
 
-            if ((ret = write(fd, messageToSend, strlen(messageToSend))) < 0)
-            {
-                perror("Falha ao enviar mensagem");
-                return errno;
-            }
+	    if ((ret = write(fd, messageToSend, strlen(messageToSend))) < 0)
+	    {
+		perror("Falha ao enviar mensagem");
+		return errno;
+	    }
 
             printf("\nPressione ENTER para ler a resposta\n");
             getchar();
@@ -112,25 +113,26 @@ int main()
             }
 
             printf("Mensagem Enviada: %s\n", messageToPrint);
+	    printf("Mensagem Decifrada: ");
 	    dumpHex(receive, option2);
-            printf("Pressione ENTER para continuar\n");
+            printf("\n\nPressione ENTER para continuar\n");
             getchar();
 
             break;
 
         case 3: //Hash
 
-            clearScreen();
-            printf("Digite a mensagem para calcular o hash: ");
-            scanf("%[^\n]%*c", messageToSend);
+	    clearScreen();
+	    printf("Digite a mensagem para ser decifrada: ");
+	    scanf("%[^\n]%*c", messageToSend);
 	    strcpy(messageToPrint, messageToSend);
-            strcat(messageToSend, " h");
+	    strcat(messageToSend, " d");
 
-            if ((ret = write(fd, messageToSend, strlen(messageToSend))) < 0)
-            {
-                perror("Falha ao enviar mensagem");
-                return errno;
-            }
+	    if ((ret = write(fd, messageToSend, strlen(messageToSend))) < 0)
+	    {
+		perror("Falha ao enviar mensagem");
+		return errno;
+	    }
 
             printf("\nPressione ENTER para ler a resposta\n");
             getchar();
@@ -144,7 +146,7 @@ int main()
 	    printf("Mensagem enviada: %s\n", messageToPrint);
             printf("Resumo critográfico: ");
             dumpHex(receive, option2);
-            printf("\nPressione ENTER para continuar\n");
+            printf("\n\nPressione ENTER para continuar\n");
             getchar();
 
             break;
@@ -180,16 +182,20 @@ void clearMessage(char message[])
     }
 }
 
+/* ================================================== */
+
 void clearScreen()
 {
     printf("\033[H\033[J");
 }
 
+/* ================================================== */
+
 void dumpHex(const void *message, int algorithm)
 {
-    char ascii[50];
+    char ascii[BUFFER_LENGTH];
     size_t i, j;
-    ascii[50] = '\0';
+    ascii[BUFFER_LENGTH] = '\0';
 
     for (i = 0; i < strlen(message); ++i)
     {
