@@ -1,18 +1,20 @@
-#include <linux/init.h>           
-#include <linux/module.h>         
-#include <linux/device.h>        
-#include <linux/kernel.h>         
-#include <linux/fs.h>             
-#include <linux/uaccess.h>          
+#include <linux/init.h>
+#include <linux/module.h>
+#include <linux/device.h>
+#include <linux/kernel.h>
+#include <linux/fs.h>
+#include <linux/uaccess.h>
 #include <linux/mutex.h>
 #include <linux/moduleparam.h>
+#include <linux/stat.h>
 #include <linux/crypto.h>
+#include <linux/random.h>
 #include <linux/mm.h>
 #include <linux/scatterlist.h>
 #include <crypto/skcipher.h>
-#include <crypto/hash.h>
 #include <linux/err.h>
 #include <linux/vmalloc.h>
+#include <crypto/hash.h>
 
 #define  DEVICE_NAME "crypto"    
 #define  CLASS_NAME  "cry" 
@@ -46,8 +48,11 @@ static DEFINE_MUTEX(crypto_mutex);
 char *key;
 char *iv;
 
-static char *returnMsg;
-static int TAM_resposta;
+//static char *returnMsg;
+//static int TAM_resposta;
+
+static char crp_key_hex[33];
+static char crp_iv_hex[33];
 
 static char crypto_key[KEY_SIZE];
 static char crypto_iv[IV_SIZE];
@@ -78,20 +83,36 @@ static struct file_operations fops =
 static int encrypt(char *message, int messageLength);
 static int decrypt(char *message, int messageLength);
 static int hash(char *message, int messageLength);
-char c2h_conv(char c);
 
 /* ================================================== */
 
-char c2h_conv(char c) {
-    if (c < (char)10) return c + '0';
-    return c + 'A' - (char)10;
-}
+
 
 /* ================================================== */
 
 static int __init crypto_init(void) {
 
 printk(KERN_INFO "Crypto Module: Initializing the Crypto Module LKM\n");
+
+static int i;
+
+    /*  Copiando conteudo para os vetores */
+    for(i = 0; i < strlen(key) && i < 33 - 1; i++)
+	    crp_key_hex[i] = key[i];
+
+    if(i < 33 - 1) 
+	    for(; i < 33 - 1; i++)
+		    crp_key_hex[i] = '0';
+
+    for(i = 0; i < strlen(iv) && i < 33 - 1; i++)
+	    crp_iv_hex[i] = iv[i];
+
+    if(i < 33 - 1) 
+	    for(; i < 33 - 1; i++)
+		    crp_iv_hex[i] = '0';
+
+    crp_key_hex[33 - 1] = '\0';
+    crp_iv_hex[33 - 1] = '\0';
 
 mutex_init(&crypto_mutex);
 
@@ -157,29 +178,30 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
    }
 }
 
-static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset){  
-   size_of_message = strlen(message);                // store the length of the stored message
-printk(KERN_INFO "Crypto Module: Received %zu characters from the user\n", len);
+static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset)
+{
 
-    switch(message[size_of_message - 1]){
-      case 'c': // cifrar
-		printk("Cifrar mensagem");
+	sprintf(message, "%s", buffer);	   // appending received string with its length
+	size_of_message = strlen(message); // store the length of the stored message
+	printk(KERN_INFO "Crypto Module: Received %zu characters from the user\n", len);
+
+	switch (message[size_of_message - 1])
+	{
+
+	case 'c':
 		encrypt(message, size_of_message - 2);
-	break;
+		break;
 
-      case 'd': // decifrar	
-		printk("Decifrar mensagem");
-		decrypt(message, size_of_message - 2);		
-    	break;
+	case 'd':
+		decrypt(message, size_of_message - 2);
+		break;
 
-      case 'h': // resumo criptográfico
-		printk("Hash mensagem");
+	case 'h':
 		hash(message, size_of_message - 2);
-    	break;
-   }
+		break;
+	}
 
-
-   return len;
+	return len;
 }
 
 static int dev_release(struct inode *inodep, struct file *filep){
@@ -237,11 +259,7 @@ static int encrypt(char *message, int messageLength)
     }
 
 
-    for(i=0; i<KEY_SIZE; i++) {
-
-	Ekey[i] = crypto_key[i]; 
-
-    }
+    strcpy(Ekey, crypto_key);
 
     if (crypto_skcipher_setkey(tfm, Ekey, KEY_SIZE)) {
         pr_info("Key could not be set\n");
@@ -255,10 +273,7 @@ static int encrypt(char *message, int messageLength)
         goto out;
     }
 
-    /* Preencher o espaço alocado */
-    for(i=0; i<IV_SIZE; i++) {
-	  Eivdata[i] = crypto_iv[i];
-	}
+    strcpy(Eivdata, crypto_iv);
 
     /* Verificar se será necessário fazer padding */
     if (messageLength % IV_SIZE) {
@@ -277,7 +292,8 @@ static int encrypt(char *message, int messageLength)
     }
     
 
-    strcpy(scratchpad, message);
+    /* Preencher o espaço alocado */
+    for(i=0; i<messageLength;   i++) scratchpad[i] = message[i];
 
     /* Realizar padding se necessário */
     for(; i<scratchpad_size; i++) {
@@ -311,15 +327,10 @@ static int encrypt(char *message, int messageLength)
     //Exibir resultado para debug 
     cryptoResult = sg_virt(&sg_cryptograf);
 
-    /*Armazenar resposta para devolver ao programa  */
-    for(i=0;i<scratchpad_size;i++){
-	    returnMsg[2*i] = c2h_conv((unsigned char)cryptoResult[i] / 16);
-	    returnMsg[2*i + 1] = c2h_conv((unsigned char)cryptoResult[i] % 16);
-	}
-    returnMsg[2*i] = 0;
-    
-    /* Armazenar tamanho da resposta do programa */
-    TAM_resposta = 2*scratchpad_size + 1; 
+    strcpy(message, cryptoResult);
+    printk("========================================");
+    print_hex_dump(KERN_DEBUG, "Result Data Encrypt: ", DUMP_PREFIX_NONE, 16, 1, cryptoResult, 16, true);
+    printk("========================================");
 
 
     out:
@@ -388,11 +399,8 @@ static int decrypt(char *message, int messageLength)
     }
 
 
-    for(i=0; i<KEY_SIZE; i++) {
+    strcpy(Ekey, crypto_key);
 
-	Ekey[i] = crypto_key[i]; 
-
-    }
 
     if (crypto_skcipher_setkey(tfm, Ekey, KEY_SIZE)) {
         pr_info("Key could not be set\n");
@@ -406,10 +414,8 @@ static int decrypt(char *message, int messageLength)
         goto out;
     }
 
-    /* Preencher o espaço alocado */
-    for(i=0; i<IV_SIZE; i++) {
-	  Eivdata[i] = crypto_iv[i];
-	}
+
+    strcpy(Eivdata, crypto_iv);
 
     /* Verificar se será necessário fazer padding */
     if (messageLength % IV_SIZE) {
@@ -428,9 +434,9 @@ static int decrypt(char *message, int messageLength)
     }
     
 
-    for(i=0; i < messageLength;   i++) {
-	scratchpad[i] = message[i];
-	}
+    /* Preencher o espaço alocado */
+    for(i=0; i<messageLength;   i++) scratchpad[i] = message[i];
+
 
     /* Realizar padding se necessário */
     for(; i<scratchpad_size; i++) {
@@ -462,15 +468,9 @@ static int decrypt(char *message, int messageLength)
 	//Exibir resultado para debug 
     decryptoResult = sg_virt(&sg_cryptograf);
 
-    /*Armazenar resposta para devolver ao programa  */
-    for(i=0;i<scratchpad_size;i++){
-	    returnMsg[2*i] = c2h_conv((unsigned char)decryptoResult[i] / 16);
-	    returnMsg[2*i + 1] = c2h_conv((unsigned char)decryptoResult[i] % 16);
-	}
-    returnMsg[2*i] = 0;
-    
-    /* Armazenar tamanho da resposta do programa */
-    TAM_resposta = 2*scratchpad_size + 1; 
+    printk("====================");
+    print_hex_dump(KERN_DEBUG, "Result Data Decrypt: ", DUMP_PREFIX_NONE, 16, 1, decryptoResult, 16, true);
+    printk("====================");
 
 
     out:
@@ -493,32 +493,40 @@ static int decrypt(char *message, int messageLength)
 
 static int hash(char *message, int messageLength)
 {
-	struct shash_desc *shash; 
-	struct crypto_shash *req; 
+	struct shash_desc *shash;
+	struct crypto_shash *req;
 	char *result = NULL;
 	int ret;
-	
+
 	req = crypto_alloc_shash("sha1", 0, 0);
 	shash = vmalloc(sizeof(struct shash_desc));
 	if (!shash)
-        	goto out;
-	
+		goto out;
+
 	shash->tfm = req;
-    	shash->flags = 0x0;
-	
-	result = vmalloc(SHA1_SIZE);
-	if(!result) goto out;
+	shash->flags = 0x0;
+
+	result = vmalloc(SHA1_SIZE * 2);
+	if (!result)
+		goto out;
 
 	ret = crypto_shash_digest(shash, message, messageLength, result);
 	strcpy(message, result);
 
+	printk("====================");
 	print_hex_dump(KERN_DEBUG, "Result Data Hash: ", DUMP_PREFIX_NONE, 16, 1, result, 16, true);
+	printk("====================");
+
+	/* ==================== */
 
 	out:
-		if(req) crypto_free_shash(req);
-		if(shash) vfree(shash);
-		if(result) vfree(result);
-		
+	if (req)
+		crypto_free_shash(req);
+	if (shash)
+		vfree(shash);
+	if (result)
+		vfree(result);
+
 	return 0;
 }
 
