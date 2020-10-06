@@ -31,7 +31,7 @@ MODULE_VERSION("1.0");
 
 static int majorNumber;					   /* device number -> determinado automaticamente */
 static char message[258] = {0};			   /* string recebida do usuario (userspace) */
-static short size_of_message;			   /* tamanho da string recebida do usuario */
+static int size_of_message;			   /* tamanho da string recebida do usuario */
 static int numberOpens = 0;				   /* Vezes que o device foi aberto */
 static struct class *cryptoClass = NULL;   /* device-driver class struct pointer */
 static struct device *cryptoDevice = NULL; /* device-driver device struct pointer */
@@ -159,18 +159,19 @@ static int dev_open(struct inode *inodep, struct file *filep)
 static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *offset)
 {
 	int error_count = 0;
+
 	// copy_to_user has the format ( * to, *from, size) and returns 0 on success
-	clearMessage(buffer);
-	error_count = copy_to_user(buffer, message, size_of_message);
+	//clearMessage(buffer);
+	error_count = copy_to_user(buffer, message, strlen(message));
 
 	if (error_count == 0)
 	{ // if true then have success
-		printk(KERN_INFO "Crypto Module: Sent %d characters to the user\n", size_of_message);
+		//printk(KERN_INFO "Crypto Module: Sent %d characters to the user\n", size_of_message);
 		return (size_of_message = 0); // clear the position to the start and return 0
 	}
 	else
 	{
-		printk(KERN_INFO "Crypto Module: Failed to send %d characters to the user\n", error_count);
+		//printk(KERN_INFO "Crypto Module: Failed to send %d characters to the user\n", error_count);
 		return -EFAULT; // Failed -- return a bad address message (i.e. -14)
 	}
 }
@@ -180,25 +181,24 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
 static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset)
 {
 	clearMessage(message);
-
 	sprintf(message, "%s", buffer);	   // appending received string with its length
 	size_of_message = strlen(message); // store the length of the stored message
-	printk(KERN_INFO "Crypto Module: Received %zu characters from the user\n", len);
+	//printk(KERN_INFO "Crypto Module: Received %zu characters from the user\n", len);
 
-	switch (message[size_of_message - 1])
+	switch (message[strlen(message) - 1])
 	{
 
-	case 'c':
-		encrypt(message, size_of_message - 2);
-		break;
+		case 'c':
+			encrypt(message, strlen(message) - 2);
+			break;
 
-	case 'd':
-		decrypt(message, size_of_message - 2);
-		break;
+		case 'd':
+			decrypt(message, strlen(message) - 2);
+			break;
 
-	case 'h':
-		hash(message, size_of_message - 2);
-		break;
+		case 'h':
+			hash(message, strlen(message) - 2);
+			break;
 	}
 
 	return len;
@@ -476,16 +476,12 @@ static int hash(char *message, int messageLength)
 	shash->tfm = req;
 	shash->flags = 0x0;
 
-	result = vmalloc(SHA1_SIZE * 2);
+	result = vmalloc(SHA1_SIZE);
 	if (!result)
 		goto out;
 
 	ret = crypto_shash_digest(shash, message, messageLength, result);
 	strcpy(message, result);
-
-	printk("====================");
-	print_hex_dump(KERN_DEBUG, "Result Data Hash: ", DUMP_PREFIX_NONE, 16, 1, result, 16, true);
-	printk("====================");
 
 	/* ==================== */
 
