@@ -49,10 +49,6 @@ char *key;
 char *iv;
 
 //static char *returnMsg;
-//static int TAM_resposta;
-
-static char crp_key_hex[33];
-static char crp_iv_hex[33];
 
 static char crypto_key[KEY_SIZE];
 static char crypto_iv[IV_SIZE];
@@ -93,26 +89,6 @@ static int hash(char *message, int messageLength);
 static int __init crypto_init(void) {
 
 printk(KERN_INFO "Crypto Module: Initializing the Crypto Module LKM\n");
-
-static int i;
-
-    /*  Copiando conteudo para os vetores */
-    for(i = 0; i < strlen(key) && i < 33 - 1; i++)
-	    crp_key_hex[i] = key[i];
-
-    if(i < 33 - 1) 
-	    for(; i < 33 - 1; i++)
-		    crp_key_hex[i] = '0';
-
-    for(i = 0; i < strlen(iv) && i < 33 - 1; i++)
-	    crp_iv_hex[i] = iv[i];
-
-    if(i < 33 - 1) 
-	    for(; i < 33 - 1; i++)
-		    crp_iv_hex[i] = '0';
-
-    crp_key_hex[33 - 1] = '\0';
-    crp_iv_hex[33 - 1] = '\0';
 
 mutex_init(&crypto_mutex);
 
@@ -183,21 +159,20 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
 
 	sprintf(message, "%s", buffer);	   // appending received string with its length
 	size_of_message = strlen(message); // store the length of the stored message
-	printk(KERN_INFO "Crypto Module: Received %zu characters from the user\n", len);
 
-	switch (message[size_of_message - 1])
+	switch (message[strlen(message) - 1])
 	{
 
 	case 'c':
-		encrypt(message, size_of_message - 2);
+		encrypt(message, strlen(message) - 2);
 		break;
 
 	case 'd':
-		decrypt(message, size_of_message - 2);
+		decrypt(message, strlen(message) - 2);
 		break;
 
 	case 'h':
-		hash(message, size_of_message - 2);
+		hash(message, strlen(message) - 2);
 		break;
 	}
 
@@ -274,31 +249,15 @@ static int encrypt(char *message, int messageLength)
     }
 
     strcpy(Eivdata, crypto_iv);
-
-    /* Verificar se será necessário fazer padding */
-    if (messageLength % IV_SIZE) {
-        cypherBlocks = 1 + (messageLength / IV_SIZE);
-        scratchpad_size = IV_SIZE * cypherBlocks;
-    } else {
-        cypherBlocks = messageLength / IV_SIZE;
-        scratchpad_size = messageLength;
-    }
-    
     
     scratchpad = vmalloc(messageLength);
     if (!scratchpad) {
         pr_info("Could not allocate scratchpad\n");
         goto out;
     }
+
+    memcpy(scratchpad, message, messageLength);
     
-
-    /* Preencher o espaço alocado */
-    for(i=0; i<messageLength;   i++) scratchpad[i] = message[i];
-
-    /* Realizar padding se necessário */
-    for(; i<scratchpad_size; i++) {
-	scratchpad[i] = 0;
-	}
     
     /* Requisitar uma área de memória para alocar o resultado da criptografia */
     cryptograf = vmalloc(scratchpad_size);
@@ -416,16 +375,6 @@ static int decrypt(char *message, int messageLength)
 
 
     strcpy(Eivdata, crypto_iv);
-
-    /* Verificar se será necessário fazer padding */
-    if (messageLength % IV_SIZE) {
-        cypherBlocks = 1 + (messageLength / IV_SIZE);
-        scratchpad_size = IV_SIZE * cypherBlocks;
-    } else {
-        cypherBlocks = messageLength / IV_SIZE;
-        scratchpad_size = messageLength;
-    }
-    
     
     scratchpad = vmalloc(messageLength);
     if (!scratchpad) {
@@ -433,15 +382,6 @@ static int decrypt(char *message, int messageLength)
         goto out;
     }
     
-
-    /* Preencher o espaço alocado */
-    for(i=0; i<messageLength;   i++) scratchpad[i] = message[i];
-
-
-    /* Realizar padding se necessário */
-    for(; i<scratchpad_size; i++) {
-	scratchpad[i] = 0;
-	}
     
     /* Requisitar uma área de memória para alocar o resultado da criptografia */
     decryptograf = vmalloc(scratchpad_size);
@@ -530,6 +470,7 @@ static int hash(char *message, int messageLength)
 	return 0;
 }
 
+/* ================================================== */
 
 module_init(crypto_init);
 module_exit(crypto_exit);

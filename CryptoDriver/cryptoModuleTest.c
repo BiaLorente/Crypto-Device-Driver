@@ -12,7 +12,7 @@ static char receive[BUFFER_LENGTH]; ///< The receive buffer from the LKM
 
 void clearMessage(char[]);
 void clearScreen();
-void dumpHex(const void *, int);
+void printHexDump(const void *, int, int);
 
 int main()
 {
@@ -83,7 +83,7 @@ int main()
 
             printf("String enviada: %s\n", messageToPrint);
 	    printf("Mensagem cifrada: ");
-            dumpHex(receive, option2);
+            printHexDump(receive, option2, 16);
             printf("\n\nPressione ENTER para continuar\n");
             getchar();
 
@@ -114,7 +114,7 @@ int main()
 
             printf("Mensagem Enviada: %s\n", messageToPrint);
 	    printf("Mensagem Decifrada: ");
-	    dumpHex(receive, option2);
+	    printHexDump(receive, option2, 16);
             printf("\n\nPressione ENTER para continuar\n");
             getchar();
 
@@ -145,7 +145,7 @@ int main()
 
 	    printf("Mensagem enviada: %s\n", messageToPrint);
             printf("Resumo critográfico: ");
-            dumpHex(receive, option2);
+            printHexDump(receive, option2, 20);
             printf("\n\nPressione ENTER para continuar\n");
             getchar();
 
@@ -191,37 +191,34 @@ void clearScreen()
 
 /* ================================================== */
 
-void dumpHex(const void *message, int algorithm)
+void printHexDump(const void *message, int algorithm, int length)
 {
-    char ascii[BUFFER_LENGTH];
-    size_t i, j;
-    ascii[BUFFER_LENGTH] = '\0';
+    char ascii[50];
+    int i;
+    ascii[50] = '\0';
 
-    for (i = 0; i < strlen(message); ++i)
+    for (i = 0; i < length; ++i)
     {
         printf("%02X", ((unsigned char *)message)[i]);
         if (((unsigned char *)message)[i] >= ' ' && ((unsigned char *)message)[i] <= '~')
         {
-            ascii[i % strlen(message)] = ((unsigned char *)message)[i];
+            ascii[i % 16] = ((unsigned char *)message)[i];
         }
-        else
+        if ((i + 1) % 8 == 0 || i + 1 == length)
         {
-            ascii[i % strlen(message)] = '.';
-        }
-        if ((i + 1) % 8 == 0 || i + 1 == strlen(message))
-        {
-            if ((i + 1) % strlen(message) == 0)
+            if ((i + 1) % 16 == 0)
             {
 	        if(algorithm == 2)
                 printf("\n%s\n", ascii);
             }
-            else if (i + 1 == strlen(message))
+            else if (i + 1 == length)
             {
-                ascii[(i + 1) % strlen(message)] = '\0';
+                ascii[(i + 1) % 16] = '\0';
 		if(algorithm == 2)
                 printf("\n%s\n", ascii);
             }
         }
     }
+
 
 }
