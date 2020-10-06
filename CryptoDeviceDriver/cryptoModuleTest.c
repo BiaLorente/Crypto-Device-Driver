@@ -13,6 +13,7 @@ static char receive[BUFFER_LENGTH]; ///< The receive buffer from the LKM
 void clearMessage(char[]);
 void clearScreen();
 void printHexDump(const void *, int, int);
+void hexToAscii(char[], char[]);
 
 int main()
 {
@@ -22,19 +23,21 @@ int main()
     int option1, option2;
     char messageToSend[BUFFER_LENGTH+2];
     char messageToPrint[BUFFER_LENGTH];
+    char messageAscii[BUFFER_LENGTH+2];
 
     if ((fd = open("/dev/crypto", O_RDWR)) < 0)
     {
         perror("Failed to open the device...");
         return errno;
     }
-
+	
     do
     {
 
         clearMessage(messageToSend);
         clearMessage(receive);
         clearMessage(messageToPrint);
+	clearMessage(messageAscii);
 
         do
         {
@@ -95,9 +98,10 @@ int main()
 	    printf("Digite a mensagem para ser decifrada: ");
 	    scanf("%[^\n]%*c", messageToSend);
 	    strcpy(messageToPrint, messageToSend);
-	    strcat(messageToSend, " d");
+	    hexToAscii(messageToSend, messageAscii);
+	    strcat(messageAscii, " d");
 
-	    if ((ret = write(fd, messageToSend, strlen(messageToSend))) < 0)
+	    if ((ret = write(fd, messageAscii, strlen(messageAscii))) < 0)
 	    {
 		perror("Falha ao enviar mensagem");
 		return errno;
@@ -220,4 +224,21 @@ void printHexDump(const void *message, int algorithm, int length)
         }
     }
 
+}
+
+/* ================================================== */
+
+void hexToAscii(char messageHexa[], char messageChar[])
+{
+	int i = 0, j = 0;
+	int num;
+	char temp[3];
+	
+	for (i = 0; i < strlen(messageHexa) + 1; i += 2)
+	{
+		sprintf(temp, "%c%c", messageHexa[i], messageHexa[i + 1]);
+		num = (int)strtol(temp, NULL, 16);
+		messageChar[j] = (char)num;
+		j++;
+	}
 }
