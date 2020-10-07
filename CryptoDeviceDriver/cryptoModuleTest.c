@@ -7,12 +7,13 @@
 #include <locale.h>
 #include <stdio_ext.h>
 
-#define BUFFER_LENGTH 258           ///< The buffer length (crude but fine)
+#define BUFFER_LENGTH 256         ///< The buffer length (crude but fine)
 static char receive[BUFFER_LENGTH]; ///< The receive buffer from the LKM
 
 void clearMessage(char[]);
 void clearScreen();
-void dumpHex(const void *, size_t);
+void printHexDump(const void *, int, int);
+void hexToAscii(char[], char[]);
 
 int main()
 {
@@ -20,21 +21,23 @@ int main()
 
     int ret, fd;
     int option1, option2;
-    char messageToSend[BUFFER_LENGTH];
+    char messageToSend[BUFFER_LENGTH+2];
     char messageToPrint[BUFFER_LENGTH];
+    char messageAscii[BUFFER_LENGTH+2];
 
     if ((fd = open("/dev/crypto", O_RDWR)) < 0)
     {
         perror("Failed to open the device...");
         return errno;
     }
-
+	
     do
     {
 
         clearMessage(messageToSend);
         clearMessage(receive);
         clearMessage(messageToPrint);
+	clearMessage(messageAscii);
 
         do
         {
@@ -63,6 +66,7 @@ int main()
             clearScreen();
             printf("Digite a mensagem para ser cifrada: ");
             scanf("%[^\n]%*c", messageToSend);
+	    strcpy(messageToPrint, messageToSend);
             strcat(messageToSend, " c");
 
             if ((ret = write(fd, messageToSend, strlen(messageToSend))) < 0)
@@ -80,9 +84,10 @@ int main()
                 return errno;
             }
 
-            printf("String enviada: %s\n", messageToSend);
-            dumpHex(receive, strlen(receive));
-            printf("\nPressione ENTER para continuar\n");
+            printf("String enviada: %s\n", messageToPrint);
+	    printf("Mensagem cifrada: ");
+            printHexDump(receive, option2, 16);
+            printf("\n\nPressione ENTER para continuar\n");
             getchar();
 
             break;
@@ -90,15 +95,17 @@ int main()
         case 2: //Decifrar
 
             clearScreen();
-            printf("Digite a mensagem para ser decifrada: ");
-            scanf("%[^\n]%*c", messageToSend);
-            strcat(messageToSend, " d");
+	    printf("Digite a mensagem para ser decifrada: ");
+	    scanf("%[^\n]%*c", messageToSend);
+	    strcpy(messageToPrint, messageToSend);
+	    hexToAscii(messageToSend, messageAscii);
+	    strcat(messageAscii, " d");
 
-            if ((ret = write(fd, messageToSend, strlen(messageToSend))) < 0)
-            {
-                perror("Falha ao enviar mensagem");
-                return errno;
-            }
+	    if ((ret = write(fd, messageAscii, strlen(messageAscii))) < 0)
+	    {
+		perror("Falha ao enviar mensagem");
+		return errno;
+	    }
 
             printf("\nPressione ENTER para ler a resposta\n");
             getchar();
@@ -109,24 +116,27 @@ int main()
                 return errno;
             }
 
-            //printf("Mensagem Decifrada: [%s]", receive);
-            printf("Pressione ENTER para continuar\n");
+            printf("Mensagem Enviada: %s\n", messageToPrint);
+	    printf("Mensagem Decifrada: ");
+	    printHexDump(receive, option2, 16);
+            printf("\n\nPressione ENTER para continuar\n");
             getchar();
 
             break;
 
         case 3: //Hash
 
-            clearScreen();
-            printf("Digite a mensagem para calcular o hash: ");
-            scanf("%[^\n]%*c", messageToSend);
-            strcat(messageToSend, " h");
+	    clearScreen();
+	    printf("Digite a mensagem para ser decifrada: ");
+	    scanf("%[^\n]%*c", messageToSend);
+	    strcpy(messageToPrint, messageToSend);
+	    strcat(messageToSend, " h");
 
-            if ((ret = write(fd, messageToSend, strlen(messageToSend))) < 0)
-            {
-                perror("Falha ao enviar mensagem");
-                return errno;
-            }
+	    if ((ret = write(fd, messageToSend, strlen(messageToSend))) < 0)
+	    {
+		perror("Falha ao enviar mensagem");
+		return errno;
+	    }
 
             printf("\nPressione ENTER para ler a resposta\n");
             getchar();
@@ -137,12 +147,12 @@ int main()
                 return errno;
             }
 
+	    printf("Mensagem enviada: %s\n", messageToPrint);
             printf("Resumo critográfico: ");
-            dumpHex(receive, strlen(receive));
-            printf("\nPressione ENTER para continuar\n");
+            printHexDump(receive, option2, 20);
+            printf("\n\nPressione ENTER para continuar\n");
             getchar();
 
-            break;
             break;
         }
 
@@ -176,47 +186,63 @@ void clearMessage(char message[])
     }
 }
 
+/* ================================================== */
+
 void clearScreen()
 {
     printf("\033[H\033[J");
 }
 
-void dumpHex(const void *data, size_t size)
+/* ================================================== */
+
+void printHexDump(const void *message, int algorithm, int length)
 {
-    char ascii[45];
-    size_t i, j;
-    ascii[45] = '\0';
-    for (i = 0; i < size; ++i)
+    char ascii[50];
+    int i;
+    ascii[50] = '\0';
+
+    for (i = 0; i < length; ++i)
     {
-        printf("%02X ", ((unsigned char *)data)[i]);
-        if (((unsigned char *)data)[i] >= ' ' && ((unsigned char *)data)[i] <= '~')
+        printf("%02X", ((unsigned char *)message)[i]);
+        if (((unsigned char *)message)[i] >= ' ' && ((unsigned char *)message)[i] <= '~')
         {
-            ascii[i % 16] = ((unsigned char *)data)[i];
+            ascii[i % 16] = ((unsigned char *)message)[i];
         }
-        else
+	else
+	{
+		ascii[i % 16] = '\0';
+	}
+        if ((i + 1) % 8 == 0 || i + 1 == length)
         {
-            ascii[i % 16] = '.';
-        }
-        if ((i + 1) % 8 == 0 || i + 1 == size)
-        {
-            printf(" ");
             if ((i + 1) % 16 == 0)
             {
-                //printf("|  %s \n", ascii);
+	        if(algorithm == 2)
+                printf("\n%s\n", ascii);
             }
-            else if (i + 1 == size)
+            else if (i + 1 == length)
             {
                 ascii[(i + 1) % 16] = '\0';
-                if ((i + 1) % 16 <= 8)
-                {
-                    printf(" ");
-                }
-                for (j = (i + 1) % 16; j < 16; ++j)
-                {
-                    printf("   ");
-                }
-                //printf("|  %s \n", ascii);
+		if(algorithm == 2)
+                printf("\n%s\n", ascii);
             }
         }
     }
+
+}
+
+/* ================================================== */
+
+void hexToAscii(char messageHexa[], char messageChar[])
+{
+	int i = 0, j = 0;
+	int num;
+	char temp[3];
+	
+	for (i = 0; i < strlen(messageHexa) + 1; i += 2)
+	{
+		sprintf(temp, "%c%c", messageHexa[i], messageHexa[i + 1]);
+		num = (int)strtol(temp, NULL, 16);
+		messageChar[j] = (char)num;
+		j++;
+	}
 }

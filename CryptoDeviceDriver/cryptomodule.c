@@ -31,7 +31,7 @@ MODULE_VERSION("1.0");
 
 static int majorNumber;					   /* device number -> determinado automaticamente */
 static char message[258] = {0};			   /* string recebida do usuario (userspace) */
-static short size_of_message;			   /* tamanho da string recebida do usuario */
+static int size_of_message;			   /* tamanho da string recebida do usuario */
 static int numberOpens = 0;				   /* Vezes que o device foi aberto */
 static struct class *cryptoClass = NULL;   /* device-driver class struct pointer */
 static struct device *cryptoDevice = NULL; /* device-driver device struct pointer */
@@ -52,8 +52,6 @@ struct skcipher_def
 };
 
 /* ================================================== */
-
-//insmod cryptomodule.ko key=”0123456789ABCDEF” iv=”0123456789ABCDEF”
 
 char *key;
 char *iv;
@@ -161,17 +159,19 @@ static int dev_open(struct inode *inodep, struct file *filep)
 static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *offset)
 {
 	int error_count = 0;
+
 	// copy_to_user has the format ( * to, *from, size) and returns 0 on success
-	error_count = copy_to_user(buffer, message, size_of_message);
+	//clearMessage(buffer);
+	error_count = copy_to_user(buffer, message, strlen(message));
 
 	if (error_count == 0)
 	{ // if true then have success
-		printk(KERN_INFO "Crypto Module: Sent %d characters to the user\n", size_of_message);
+		//printk(KERN_INFO "Crypto Module: Sent %d characters to the user\n", size_of_message);
 		return (size_of_message = 0); // clear the position to the start and return 0
 	}
 	else
 	{
-		printk(KERN_INFO "Crypto Module: Failed to send %d characters to the user\n", error_count);
+		//printk(KERN_INFO "Crypto Module: Failed to send %d characters to the user\n", error_count);
 		return -EFAULT; // Failed -- return a bad address message (i.e. -14)
 	}
 }
@@ -181,25 +181,24 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
 static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset)
 {
 	clearMessage(message);
-
 	sprintf(message, "%s", buffer);	   // appending received string with its length
 	size_of_message = strlen(message); // store the length of the stored message
-	printk(KERN_INFO "Crypto Module: Received %zu characters from the user\n", len);
+	//printk(KERN_INFO "Crypto Module: Received %zu characters from the user\n", len);
 
-	switch (message[size_of_message - 1])
+	switch (message[strlen(message) - 1])
 	{
 
-	case 'c':
-		encrypt(message, size_of_message - 2);
-		break;
+		case 'c':
+			encrypt(message, strlen(message) - 2);
+			break;
 
-	case 'd':
-		decrypt(message, size_of_message - 2);
-		break;
+		case 'd':
+			decrypt(message, strlen(message) - 2);
+			break;
 
-	case 'h':
-		hash(message, size_of_message - 2);
-		break;
+		case 'h':
+			hash(message, strlen(message) - 2);
+			break;
 	}
 
 	return len;
@@ -262,7 +261,6 @@ static int encrypt(char message[], int messageLength)
 		pr_err("fail setting key");
 		goto out;
 	}
-	//print_hex_dump(KERN_DEBUG, "Key Encrypt: ", DUMP_PREFIX_NONE, 16, 1, key_encrypt, 16, true);
 
 	/* ==================== */
 
@@ -277,8 +275,6 @@ static int encrypt(char message[], int messageLength)
 
 	strcpy(iv_encrypt, iv);
 
-	//print_hex_dump(KERN_DEBUG, "IV Encrypt: ", DUMP_PREFIX_NONE, 16, 1, iv_encrypt, 16, true);
-
 	/* ==================== */
 
 	scratchpad = vmalloc(messageLength);
@@ -289,7 +285,6 @@ static int encrypt(char message[], int messageLength)
 	}
 
 	memcpy(scratchpad, message, messageLength);
-	//print_hex_dump(KERN_DEBUG, "Message Encrypt: ", DUMP_PREFIX_NONE, 16, 1, scratchpad, 16, true);
 
 	/* ==================== */
 
@@ -317,13 +312,11 @@ static int encrypt(char message[], int messageLength)
 	strcpy(message, result);
 	printk("========================================");
 	print_hex_dump(KERN_DEBUG, "Result Data Encrypt: ", DUMP_PREFIX_NONE, 16, 1, result, 16, true);
-	//print_hex_dump(KERN_DEBUG, "Result Data Encrypt 2: ", DUMP_PREFIX_NONE, 16, 1, message, 16, true);
 	printk("========================================");
 
-/* ==================== */
+	/* ==================== */
 
-/* Out */
-out:
+	out:
 	if (skcipher)
 		crypto_free_skcipher(skcipher);
 
@@ -391,7 +384,6 @@ static int decrypt(char *message, int messageLength)
 		pr_err("fail setting key");
 		goto out;
 	}
-	//print_hex_dump(KERN_DEBUG, "Key Decrypt: ", DUMP_PREFIX_NONE, 16, 1, key_decrypt, 16, true);
 
 	/* ==================== */
 
@@ -406,8 +398,6 @@ static int decrypt(char *message, int messageLength)
 
 	strcpy(iv_decrypt, iv);
 
-	//print_hex_dump(KERN_DEBUG, "IV Decrypt: ", DUMP_PREFIX_NONE, 16, 1, iv_decrypt, 16, true);
-
 	/* ==================== */
 
 	/* Set message */
@@ -419,7 +409,6 @@ static int decrypt(char *message, int messageLength)
 	}
 
 	memcpy(scratchpad, message, messageLength);
-	//print_hex_dump(KERN_DEBUG, "Message decrypt: ", DUMP_PREFIX_NONE, 16, 1, scratchpad, 16, true);
 
 	/* ==================== */
 
@@ -449,10 +438,9 @@ static int decrypt(char *message, int messageLength)
 	print_hex_dump(KERN_DEBUG, "Result Data Decrypt: ", DUMP_PREFIX_NONE, 16, 1, result, 16, true);
 	printk("====================");
 
-/* ==================== */
+	/* ==================== */
 
-/* Out */
-out:
+	out:
 	if (skcipher)
 		crypto_free_skcipher(skcipher);
 
@@ -488,16 +476,16 @@ static int hash(char *message, int messageLength)
 	shash->tfm = req;
 	shash->flags = 0x0;
 
-	result = vmalloc(SHA1_SIZE * 2);
+	result = vmalloc(SHA1_SIZE);
 	if (!result)
 		goto out;
 
 	ret = crypto_shash_digest(shash, message, messageLength, result);
 	strcpy(message, result);
 
-	print_hex_dump(KERN_DEBUG, "Result Data Hash: ", DUMP_PREFIX_NONE, 16, 1, result, 16, true);
+	/* ==================== */
 
-out:
+	out:
 	if (req)
 		crypto_free_shash(req);
 	if (shash)
