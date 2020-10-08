@@ -31,7 +31,7 @@ MODULE_VERSION("1.0");
 
 static int majorNumber;					   /* device number -> determinado automaticamente */
 static char message[258] = {0};			   /* string recebida do usuario (userspace) */
-static int size_of_message;			   /* tamanho da string recebida do usuario */
+static int size_of_message;				   /* tamanho da string recebida do usuario */
 static int numberOpens = 0;				   /* Vezes que o device foi aberto */
 static struct class *cryptoClass = NULL;   /* device-driver class struct pointer */
 static struct device *cryptoDevice = NULL; /* device-driver device struct pointer */
@@ -92,7 +92,6 @@ static int __init crypto_init(void)
 
 	mutex_init(&crypto_mutex);
 
-	// Try to dynamically allocate a major number for the device
 	majorNumber = register_chrdev(0, DEVICE_NAME, &fops);
 	if (majorNumber < 0)
 	{
@@ -115,13 +114,12 @@ static int __init crypto_init(void)
 	cryptoDevice = device_create(cryptoClass, NULL, MKDEV(majorNumber, 0), NULL, DEVICE_NAME);
 	if (IS_ERR(cryptoDevice))
 	{
-		// Clean up if there is an error
-		class_destroy(cryptoClass); // Repeated code but the alternative is goto statements
+		class_destroy(cryptoClass);
 		unregister_chrdev(majorNumber, DEVICE_NAME);
 		printk(KERN_ALERT "Failed to create the device\n");
 		return PTR_ERR(cryptoDevice);
 	}
-	printk(KERN_INFO "Crypto Module: device class created correctly\n"); // Made it! device was initialized
+	printk(KERN_INFO "Crypto Module: device class created correctly\n");
 
 	return 0;
 }
@@ -131,10 +129,10 @@ static int __init crypto_init(void)
 static void __exit crypto_exit(void)
 {
 	mutex_destroy(&crypto_mutex);
-	device_destroy(cryptoClass, MKDEV(majorNumber, 0)); // remove the device
-	class_unregister(cryptoClass);						// unregister the device class
-	class_destroy(cryptoClass);							// remove the device class
-	unregister_chrdev(majorNumber, DEVICE_NAME);		// unregister the major number
+	device_destroy(cryptoClass, MKDEV(majorNumber, 0));
+	class_unregister(cryptoClass);
+	class_destroy(cryptoClass);
+	unregister_chrdev(majorNumber, DEVICE_NAME);
 	printk(KERN_INFO "Crypto Module: Goodbye from the LKM!\n");
 }
 
@@ -143,8 +141,7 @@ static void __exit crypto_exit(void)
 static int dev_open(struct inode *inodep, struct file *filep)
 {
 	if (!mutex_trylock(&crypto_mutex))
-	{	// Try to acquire the mutex (i.e., put the lock on/down)
-		// returns 1 if successful and 0 if there is contention
+	{
 		printk(KERN_ALERT "Crypto Module: Device in use by another process");
 		return -EBUSY;
 	}
@@ -160,18 +157,16 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
 {
 	int error_count = 0;
 
-	// copy_to_user has the format ( * to, *from, size) and returns 0 on success
-	//clearMessage(buffer);
+	// copy_to_user( * to, *from, size) and returns 0 on success
+	clearMessage(buffer);
 	error_count = copy_to_user(buffer, message, strlen(message));
 
 	if (error_count == 0)
 	{ // if true then have success
-		//printk(KERN_INFO "Crypto Module: Sent %d characters to the user\n", size_of_message);
-		return (size_of_message = 0); // clear the position to the start and return 0
+		return (size_of_message = 0);
 	}
 	else
 	{
-		//printk(KERN_INFO "Crypto Module: Failed to send %d characters to the user\n", error_count);
 		return -EFAULT; // Failed -- return a bad address message (i.e. -14)
 	}
 }
@@ -185,20 +180,20 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
 	size_of_message = strlen(message); // store the length of the stored message
 	//printk(KERN_INFO "Crypto Module: Received %zu characters from the user\n", len);
 
-	switch (message[strlen(message) - 1])
+	switch (size_of_message - 1])
 	{
 
-		case 'c':
-			encrypt(message, strlen(message) - 2);
-			break;
+	case 'c':
+		encrypt(size_of_message - 2);
+		break;
 
-		case 'd':
-			decrypt(message, strlen(message) - 2);
-			break;
+	case 'd':
+		decrypt(size_of_message - 2);
+		break;
 
-		case 'h':
-			hash(message, strlen(message) - 2);
-			break;
+	case 'h':
+		hash(size_of_message - 2);
+		break;
 	}
 
 	return len;
@@ -209,7 +204,7 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
 static int dev_release(struct inode *inodep, struct file *filep)
 {
 	mutex_unlock(&crypto_mutex);
-	printk(KERN_INFO "Crypto Module: Device successfully closed\n");
+	//printk(KERN_INFO "Crypto Module: Device successfully closed\n");
 	return 0;
 }
 
@@ -278,6 +273,7 @@ static int encrypt(char message[], int messageLength)
 	/* ==================== */
 
 	scratchpad = vmalloc(messageLength);
+
 	if (!scratchpad)
 	{
 		pr_info("Could not allocate scratchpad\n");
@@ -316,7 +312,7 @@ static int encrypt(char message[], int messageLength)
 
 	/* ==================== */
 
-	out:
+out:
 	if (skcipher)
 		crypto_free_skcipher(skcipher);
 
@@ -433,14 +429,14 @@ static int decrypt(char *message, int messageLength)
 
 	result = sg_virt(&sk.sg);
 	strcpy(message, result);
-	
+
 	printk("====================");
 	print_hex_dump(KERN_DEBUG, "Result Data Decrypt: ", DUMP_PREFIX_NONE, 16, 1, result, 16, true);
 	printk("====================");
 
 	/* ==================== */
 
-	out:
+out:
 	if (skcipher)
 		crypto_free_skcipher(skcipher);
 
@@ -483,9 +479,13 @@ static int hash(char *message, int messageLength)
 	ret = crypto_shash_digest(shash, message, messageLength, result);
 	strcpy(message, result);
 
+	printk("====================");
+	print_hex_dump(KERN_DEBUG, "Result Data Hash: ", DUMP_PREFIX_NONE, 20, 1, result, 20, true);
+	printk("====================");
+
 	/* ==================== */
 
-	out:
+out:
 	if (req)
 		crypto_free_shash(req);
 	if (shash)
