@@ -35,7 +35,6 @@ int main()
 
         clearMessage(messageToSend);
         clearMessage(receive);
-        clearMessage(messageToPrint);
         clearMessage(messageAscii);
 
         do
@@ -124,9 +123,9 @@ int main()
         case 3: //Hash
 
             clearScreen();
-            printf("Digite a mensagem desejada: ");
+            printf("Digite a mensagem desejada para calcular o resumo criptográfico: ");
             scanf("%[^\n]%*c", messageToSend);
-            printf("\nMensagem enviada: %s\n", messageToPrint);
+            printf("\nMensagem enviada: %s\n", messageToSend);
             strcat(messageToSend, " h");
 
             if ((ret = write(fd, messageToSend, strlen(messageToSend))) < 0)

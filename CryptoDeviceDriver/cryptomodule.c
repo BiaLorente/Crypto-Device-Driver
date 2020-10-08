@@ -180,19 +180,19 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
 	size_of_message = strlen(message); // store the length of the stored message
 	//printk(KERN_INFO "Crypto Module: Received %zu characters from the user\n", len);
 
-	switch (size_of_message - 1])
+	switch (message[size_of_message - 1])
 	{
 
 	case 'c':
-		encrypt(size_of_message - 2);
+		encrypt(message, size_of_message - 2);
 		break;
 
 	case 'd':
-		decrypt(size_of_message - 2);
+		decrypt(message, size_of_message - 2);
 		break;
 
 	case 'h':
-		hash(size_of_message - 2);
+		hash(message, size_of_message - 2);
 		break;
 	}
 
@@ -305,7 +305,9 @@ static int encrypt(char message[], int messageLength)
 
 	result = sg_virt(&sk.sg);
 
+	clearMessage(message);
 	strcpy(message, result);
+
 	printk("========================================");
 	print_hex_dump(KERN_DEBUG, "Result Data Encrypt: ", DUMP_PREFIX_NONE, 16, 1, result, 16, true);
 	printk("========================================");
@@ -428,6 +430,8 @@ static int decrypt(char *message, int messageLength)
 	init_completion(&sk.result.completion);
 
 	result = sg_virt(&sk.sg);
+	
+	clearMessage(message);
 	strcpy(message, result);
 
 	printk("====================");
@@ -477,6 +481,8 @@ static int hash(char *message, int messageLength)
 		goto out;
 
 	ret = crypto_shash_digest(shash, message, messageLength, result);
+
+	clearMessage(message);
 	strcpy(message, result);
 
 	printk("====================");
